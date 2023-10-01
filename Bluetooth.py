@@ -2,6 +2,7 @@ import serial
 import signal
 import re
 
+
 class Bluetooth(object):
     def __init__(self, baudrate=115200, bytesize=8, stopbits=1):
         self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, bytesize=bytesize, stopbits=stopbits)
@@ -24,7 +25,8 @@ class Bluetooth(object):
                     signal.alarm(0)
                     err = re.search(r'\+ERROR (\d)', str(recv))
                     # if err is None:
-                    print(err)
+                    print(err.group(1))
+                    print(recv)
                     return recv
         except TimeoutError:
             signal.alarm(0)
@@ -32,7 +34,7 @@ class Bluetooth(object):
             return None
 
     def test(self, timeout=1):
-        if self.__send_data(b'AT') == b'AT\r\n+OK\r\n':
+        if self.__send_data(b'A') == b'AT\r\n+OK\r\n':
             return True
         else:
             return False
