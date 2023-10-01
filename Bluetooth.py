@@ -56,6 +56,7 @@ class Bluetooth(threading.Thread):
                             if key == data:
                                 if self.statecallback:
                                     self.statecallback(val)
+                                break
                     else:
                         if self.datacallback:
                             self.datacallback(data)
