@@ -25,6 +25,14 @@ class Bluetooth(threading.Thread):
             "11": 230400,
             "12": 500000,
             "13": 1000000}
+    PARI = {"0": "无检验",
+            "1": "奇校验",
+            "2": "偶校验"}
+    ROLE = {"0": "从机",
+            "1": "主机"}
+    ADV = {"0": "关闭广播",
+           "1": "普通广播",
+           "2": "iBeacon广播"}
 
     def __init__(self, baudrate=115200, bytesize=8, stopbits=1, timeout=1):
         threading.Thread.__init__(self)
@@ -39,6 +47,13 @@ class Bluetooth(threading.Thread):
         self.nowstate = None
         self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, bytesize=bytesize, stopbits=stopbits)
         self.ser.flushInput()
+
+    def close(self):
+        self.ser.close()
+
+    def write(self, data):
+        self.ser.flushInput()
+        self.ser.write(data)
 
     def run(self):
         while True:
@@ -125,12 +140,10 @@ class Bluetooth(threading.Thread):
             return False
 
     def get_baudrate(self):
-        # 查询当前串口波特率的代码
         baudnum = re.search(r'BAUD:(\d+)', str(self.__send_atdata(b'AT+BAUD=?')))
         return self.BAUD[baudnum]
 
     def set_baudrate(self, baudrate):
-        # 设置当前串口波特率的代码
         strbaud = str(baudrate)
         if strbaud in self.BAUD:
             if self.__send_atdata(b'AT+BAUD=' + strbaud.encode()) \
@@ -151,28 +164,46 @@ class Bluetooth(threading.Thread):
         return False
 
     def get_parity(self):
-        # 查询当前串口检验位的代码
-        pass
+        parinum = re.search(r'PARI:(\d)', str(self.__send_atdata(b'AT+PARI=?')))
+        return self.PARI[parinum]
 
-    def set_parity(self, new_parity):
-        # 设置新的串口检验位的代码
-        pass
+    def set_parity(self, parity):
+        strbaud = str(parity)
+        if self.__send_atdata(b'AT+PARI=' + strbaud.encode()) \
+                == b'AT+PARI=' + strbaud.encode() + b'\r\n+OK\r\n':
+            if parity == 0:
+                self.ser.parity = serial.PARITY_NONE
+            elif parity == 1:
+                self.ser.parity = serial.PARITY_ODD
+            elif parity == 2:
+                self.ser.parity = serial.PARITY_EVEN
+            return True
+        else:
+            return False
 
     def get_role(self):
-        # 查询当前蓝牙角色的代码
-        pass
+        rolenum = re.search(r'ROLE:(\d)', str(self.__send_atdata(b'AT+ROLE=?')))
+        return self.ROLE[rolenum]
 
     def set_role(self, role):
-        # 设置新的蓝牙角色的代码
-        pass
+        strrole = str(role)
+        if self.__send_atdata(b'AT+ROLE=' + strrole.encode()) \
+                == b'AT+ROLE=' + strrole.encode() + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
     def get_adv(self):
-        # 查询广播使能状态的代码
-        pass
+        advnum = re.search(r'ADV:(\d)', str(self.__send_atdata(b'AT+ADV=?')))
+        return self.ADV[advnum]
 
-    def set_adv(self, para):
-        # 设置广播使能状态的代码
-        pass
+    def set_adv(self, adv):
+        stradv = str(adv)
+        if self.__send_atdata(b'AT+ADV=' + stradv.encode()) \
+                == b'AT+ADV=' + stradv.encode() + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
     def get_advdata(self):
         # 查询广播数据的代码
