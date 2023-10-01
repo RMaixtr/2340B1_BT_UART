@@ -68,11 +68,9 @@ class Bluetooth(threading.Thread):
                 else:
                     othdata = self.q.get()
                     if othdata in self.STATE:
-                        for key, val in self.STATE.items():
-                            if key == othdata:
-                                if self.statecallback:
-                                    self.statecallback(val)
-                                break
+                        state = self.statecallback(self.STATE[othdata])
+                        if self.statecallback:
+                            self.statecallback(state)
                     else:
                         if self.datacallback:
                             self.datacallback(othdata)
@@ -129,10 +127,7 @@ class Bluetooth(threading.Thread):
     def get_baudrate(self):
         # 查询当前串口波特率的代码
         baudnum = re.search(r'BAUD:(\d+)', str(self.__send_atdata(b'AT+BAUD=?')))
-        for key, val in self.STATE.items():
-            if key == baudnum:
-                return val
-        return None
+        return self.BAUD[baudnum]
 
     def set_baudrate(self, baudrate):
         # 设置当前串口波特率的代码
