@@ -25,6 +25,7 @@ class Bluetooth(object):
                     recv = self.ser.read(count)
                     signal.alarm(0)
                     err = re.search(r'\+ERROR (\d)', str(recv))
+                    print(recv)
                     if err is not None:
                         if err.group(1) == "1":
                             raise Exception("长度不匹配")
@@ -40,7 +41,6 @@ class Bluetooth(object):
                             raise Exception("参数非法")
                         else:
                             raise Exception("未知错误")
-                    print(recv)
                     return recv
         except TimeoutError:
             signal.alarm(0)
@@ -53,7 +53,173 @@ class Bluetooth(object):
         else:
             return False
 
+    def enter_at(self):
+        if self.__send_data(b'+++') == b'+++\r\n+OK\r\n':
+            return True
+        else:
+            return False
+
+    def exit_at(self):
+        if self.__send_data(b'AT+EXIT') == b'AT+EXIT\r\n+OK\r\n':
+            return True
+        else:
+            return False
+
+    def reset(self):
+        if self.__send_data(b'AT+RESET') == b'AT+RESET\r\n+OK\r\n':
+            return True
+        else:
+            return False
+
+    def restore(self):
+        if self.__send_data(b'AT+RESTORE') == b'AT+RESTORE\r\n+OK\r\n':
+            return True
+        else:
+            return False
+
+    def get_baudrate(self):
+        # 查询当前串口波特率的代码
+        # self.__send_data(b'AT+BAUD=?')
+        # err = re.search(r'\+ERROR (\d)', str( self.__send_data(b'AT+BAUD=?')))
+        pass
+
+    def set_baudrate(self, baudrate):
+        # 设置当前串口波特率的代码
+        pass
+
+    def get_parity(self):
+        # 查询当前串口检验位的代码
+        pass
+
+    def set_parity(self, new_parity):
+        # 设置新的串口检验位的代码
+        pass
+
+    def get_role(self):
+        # 查询当前蓝牙角色的代码
+        pass
+
+    def set_role(self, role):
+        # 设置新的蓝牙角色的代码
+        pass
+
+    def get_adv(self):
+        # 查询广播使能状态的代码
+        pass
+
+    def set_adv(self, para):
+        # 设置广播使能状态的代码
+        pass
+
+    def get_advdata(self):
+        # 查询广播数据的代码
+        pass
+
+    def set_advdat(self, para):
+        # 设置广播数据的代码
+        pass
+
+    def get_advintv(self):
+        # 查询广播间隙的代码
+        pass
+
+    def set_advintv(self, para):
+        # 设置广播间隙的代码
+        pass
+
+    def get_name(self):
+        # 查询广播设备名的代码
+        pass
+
+    def set_name(self, para):
+        # 设置广播设备名的代码
+        pass
+
+    def get_conparams(self):
+        # 查询连接配置的代码
+        pass
+
+    def set_conparams(self, para):
+        # 设置连接配置的代码
+        pass
+
+    def disconnect(self):
+        # 断开
+        pass
+
+    def get_mac(self):
+        # 查询mac
+        pass
+
+    def set_mac(self, para):
+        # 设置mac
+        pass
+
+    def get_bondmac(self):
+        # 查询绑定mac
+        pass
+
+    def set_bondmac(self, para):
+        # 绑定mac
+        pass
+
+    def get_mtu(self):
+        # 查询mtu
+        pass
+
+    def set_mtu(self, para):
+        # 设置mtu
+        pass
+
+    def get_scanwindow(self):
+        # 查询扫描窗口
+        pass
+
+    def set_scanwindow(self, para):
+        # 设置扫描窗口
+        pass
+
+    def get_uuidserver(self):
+        # 查询服务 UUID
+        pass
+
+    def set_uuidserver(self, para):
+        # 设置服务 UUID
+        pass
+
+    def set_auth(self, para):
+        # 设置空中配置认证密码
+        pass
+
+    def set_upauth(self, para):
+        # 修改空中认证密码
+        pass
+
+    def sleep(self, para):
+        # 进入睡眠
+        pass
+
+    def set_atestate(self, para):
+        # 设置ATE 运行状态
+        pass
+
+    def get_power(self):
+        # 查询发射功率
+        pass
+
+    def set_power(self, para):
+        # 设置发射功率
+        pass
+
+    def get_version(self):
+        # 查询软件版本
+        pass
+
+    def bondenable(self, para):
+        # 绑定mac使能
+        pass
+
 
 if __name__ == "__main__":
     blu = Bluetooth()
-    print(blu.test())
+    print(blu.get_baudrate())
