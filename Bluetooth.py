@@ -135,6 +135,7 @@ class Bluetooth(threading.Thread):
         if strbaud in self.BAUD:
             if self.__send_atdata(b'AT+BAUD=' + strbaud.encode()) \
                     == b'AT+BAUD=' + strbaud.encode() + b'\r\n+OK\r\n':
+                self.ser.baudrate = self.BAUD[strbaud]
                 return True
             else:
                 return False
@@ -143,6 +144,7 @@ class Bluetooth(threading.Thread):
                 if val == baudrate:
                     if self.__send_atdata(b'AT+BAUD=' + key.encode()) \
                             == b'AT+BAUD=' + key.encode() + b'\r\n+OK\r\n':
+                        self.ser.baudrate = baudrate
                         return True
                     else:
                         return False
