@@ -6,8 +6,12 @@ import re
 class Bluetooth(object):
     def __init__(self, baudrate=115200, bytesize=8, stopbits=1, timeout=1):
         self.timeout = timeout
+        self.callback = None
         self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, bytesize=bytesize, stopbits=stopbits)
         self.ser.flushInput()
+
+    def set_callback(self, function):
+        pass
 
     def __send_data(self, data):
         self.ser.flushInput()
