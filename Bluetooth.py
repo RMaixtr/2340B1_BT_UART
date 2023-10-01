@@ -1,16 +1,30 @@
 import threading
 import serial
-import signal
 import re
 import time
+from time import *
 import queue
 
 
 class Bluetooth(threading.Thread):
-    state = {b'\r\n STA:connect\r\n': "连接成功",
+    STATE = {b'\r\n STA:connect\r\n': "连接成功",
              b'\r\n disconnec\r\n': "连接断开",
              b'\r\n STA:wakeup\r\n': "系统唤醒",
              b'\r\n STA:sleep\r\n': "睡眠模式"}
+    BAUD = {"0": 1200,
+            "1": 2400,
+            "2": 4800,
+            '3': 9600,
+            "4": 14400,
+            "5": 19200,
+            "6": 28800,
+            "7": 38400,
+            "8": 57600,
+            "9": 76800,
+            "10": 115200,
+            "11": 230400,
+            "12": 500000,
+            "13": 1000000}
 
     def __init__(self, baudrate=115200, bytesize=8, stopbits=1, timeout=1):
         threading.Thread.__init__(self)
@@ -34,6 +48,7 @@ class Bluetooth(threading.Thread):
                 self.q.put(data)
                 print(data)
                 if self.isatreturn:
+                    self.isatreturn = False
                     err = re.search(r'\+ERROR (\d)', str(data))
                     if err is not None:
                         if err.group(1) == "1":
@@ -51,62 +66,92 @@ class Bluetooth(threading.Thread):
                         else:
                             raise Exception("未知错误")
                 else:
-                    if data in self.state:
-                        for key, val in self.state.items():
-                            if key == data:
+                    othdata = self.q.get()
+                    if othdata in self.STATE:
+                        for key, val in self.STATE.items():
+                            if key == othdata:
                                 if self.statecallback:
                                     self.statecallback(val)
                                 break
                     else:
                         if self.datacallback:
-                            self.datacallback(data)
+                            self.datacallback(othdata)
             time.sleep(0.01)
 
+    def __send_atdata(self, data):
+        self.ser.flushInput()
+        self.isatreturn = True
+        self.ser.write(data)
+        start_time = time()
+        while True:
+            if not self.q.empty():
+                return self.q.get()
+            if time() - start_time > self.timeout:
+                raise Exception("超时,请检测是否处于AT模式及硬件连接")
+            time.sleep(0.1)
+
     def set_data_callback(self, function):
-        pass
+        self.datacallback = function
 
     def set_state_callback(self, function):
-        pass
+        self.statecallback = function
 
     def test(self):
-        if self.__send_data(b'AT') == b'AT\r\n+OK\r\n':
+        if self.__send_atdata(b'AT') == b'AT\r\n+OK\r\n':
             return True
         else:
             return False
 
     def enter_at(self):
-        if self.__send_data(b'+++') == b'+++\r\n+OK\r\n':
+        if self.__send_atdata(b'+++') == b'+++\r\n+OK\r\n':
             return True
         else:
             return False
 
     def exit_at(self):
-        if self.__send_data(b'AT+EXIT') == b'AT+EXIT\r\n+OK\r\n':
+        if self.__send_atdata(b'AT+EXIT') == b'AT+EXIT\r\n+OK\r\n':
             return True
         else:
             return False
 
     def reset(self):
-        if self.__send_data(b'AT+RESET') == b'AT+RESET\r\n+OK\r\n':
+        if self.__send_atdata(b'AT+RESET') == b'AT+RESET\r\n+OK\r\n':
             return True
         else:
             return False
 
     def restore(self):
-        if self.__send_data(b'AT+RESTORE') == b'AT+RESTORE\r\n+OK\r\n':
+        if self.__send_atdata(b'AT+RESTORE') == b'AT+RESTORE\r\n+OK\r\n':
             return True
         else:
             return False
 
     def get_baudrate(self):
         # 查询当前串口波特率的代码
-        # self.__send_data(b'AT+BAUD=?')
-        # err = re.search(r'\+ERROR (\d)', str( self.__send_data(b'AT+BAUD=?')))
-        pass
+        baudnum = re.search(r'BAUD:(\d+)', str(self.__send_atdata(b'AT+BAUD=?')))
+        for key, val in self.STATE.items():
+            if key == baudnum:
+                return val
+        return None
 
     def set_baudrate(self, baudrate):
         # 设置当前串口波特率的代码
-        pass
+        strbaud = str(baudrate)
+        if strbaud in self.BAUD:
+            if self.__send_atdata(b'AT+BAUD=' + strbaud.encode()) \
+                    == b'AT+BAUD=' + strbaud.encode() + b'\r\n+OK\r\n':
+                return True
+            else:
+                return False
+        else:
+            for key, val in self.STATE.items():
+                if val == baudrate:
+                    if self.__send_atdata(b'AT+BAUD=' + key.encode()) \
+                            == b'AT+BAUD=' + key.encode() + b'\r\n+OK\r\n':
+                        return True
+                    else:
+                        return False
+        return False
 
     def get_parity(self):
         # 查询当前串口检验位的代码
