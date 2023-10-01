@@ -1,35 +1,40 @@
+import threading
 import serial
 import signal
 import re
+import time
+import queue
 
 
-class Bluetooth(object):
+class Bluetooth(threading.Thread):
+    state = {b'\r\n STA:connect\r\n': "连接成功",
+             b'\r\n disconnec\r\n': "连接断开",
+             b'\r\n STA:wakeup\r\n': "系统唤醒",
+             b'\r\n STA:sleep\r\n': "睡眠模式"}
+
     def __init__(self, baudrate=115200, bytesize=8, stopbits=1, timeout=1):
+        threading.Thread.__init__(self)
+        self.q = queue.Queue()
+        self.baudrate = baudrate
+        self.bytesize = bytesize
+        self.stopbits = stopbits
         self.timeout = timeout
-        self.callback = None
+        self.datacallback = None
+        self.statecallback = None
+        self.isatreturn = False
+        self.nowstate = None
         self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, bytesize=bytesize, stopbits=stopbits)
         self.ser.flushInput()
 
-    def set_callback(self, function):
-        pass
-
-    def __send_data(self, data):
-        self.ser.flushInput()
-        self.ser.write(data)
-
-        def timeout_handler(signum, frame):
-            raise TimeoutError("函数执行超时，请检查硬件是否连接正确")
-
-        signal.signal(signal.SIGALRM, timeout_handler)
-        try:
-            signal.alarm(self.timeout)  # 设置闹钟定时器
-            while True:
-                count = self.ser.inWaiting()
-                if count != 0:
-                    recv = self.ser.read(count)
-                    signal.alarm(0)
-                    err = re.search(r'\+ERROR (\d)', str(recv))
-                    print(recv)
+    def run(self):
+        while True:
+            count = self.ser.inWaiting()
+            if count != 0:
+                data = self.ser.read(count)
+                self.q.put(data)
+                print(data)
+                if self.isatreturn:
+                    err = re.search(r'\+ERROR (\d)', str(data))
                     if err is not None:
                         if err.group(1) == "1":
                             raise Exception("长度不匹配")
@@ -45,11 +50,22 @@ class Bluetooth(object):
                             raise Exception("参数非法")
                         else:
                             raise Exception("未知错误")
-                    return recv
-        except TimeoutError:
-            signal.alarm(0)
-            print("函数执行超时，请检查硬件是否连接正确")
-            return None
+                else:
+                    if data in self.state:
+                        for key, val in self.state.items():
+                            if key == data:
+                                if self.statecallback:
+                                    self.statecallback(val)
+                    else:
+                        if self.datacallback:
+                            self.datacallback(data)
+            time.sleep(0.01)
+
+    def set_data_callback(self, function):
+        pass
+
+    def set_state_callback(self, function):
+        pass
 
     def test(self):
         if self.__send_data(b'AT') == b'AT\r\n+OK\r\n':
