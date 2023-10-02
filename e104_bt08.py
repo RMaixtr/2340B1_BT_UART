@@ -27,7 +27,7 @@ class e104_bt08(threading.Thread):
         self.datacallback = None
         self.statecallback = None
         self.isatreturn = False
-        self.nowstate = None
+        # self.nowstate = None
         self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, bytesize=bytesize, stopbits=stopbits)
         self.ser.flushInput()
 
@@ -69,19 +69,19 @@ class e104_bt08(threading.Thread):
                     othdata = self.q.get()
                     if othdata == AT_STATE_CONNECT:
                         if self.statecallback:
-                            self.statecallback(AT_STATE_CONNECT)
+                            self.statecallback(self, AT_STATE_CONNECT)
                     elif othdata == AT_STATE_DISCONNECT:
                         if self.statecallback:
-                            self.statecallback(AT_STATE_DISCONNECT)
+                            self.statecallback(self, AT_STATE_DISCONNECT)
                     elif othdata == AT_STATE_WAKEUP:
                         if self.statecallback:
-                            self.statecallback(AT_STATE_WAKEUP)
+                            self.statecallback(self, AT_STATE_WAKEUP)
                     elif othdata == AT_STATE_SLEEP:
                         if self.statecallback:
-                            self.statecallback(AT_STATE_SLEEP)
+                            self.statecallback(self, AT_STATE_SLEEP)
                     else:
                         if self.datacallback:
-                            self.datacallback(othdata)
+                            self.datacallback(self, othdata)
             time.sleep(0.05)
 
     def __send_atdata(self, data):
@@ -195,41 +195,60 @@ class e104_bt08(threading.Thread):
         else:
             return False
 
-    def get_advintv(self):
-        # 查询广播间隙的代码
-        pass
+    def set_ibeacon_advdata(self, uuid, major, minor, power):
+        set_data = b'AT+ADVDAT=\x1a\xff\x4c\x00\x02\x15' + uuid + major + minor + power
+        if self.__send_atdata(set_data) == set_data + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
-    def set_advintv(self, para):
-        # 设置广播间隙的代码
-        pass
+    def get_advintv(self):
+        return int(re.search(b'ADVINTV:(\d+)', self.__send_atdata(b'AT+ADVINTV=?')).group(1))
+
+    def set_advintv(self, advintv=32):
+        if self.__send_atdata(b'AT+ADVINTV=' + str(advintv).encode()) \
+                == b'AT+ADVINTV=' + str(advintv).encode() + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
     def get_name(self):
-        # 查询广播设备名的代码
-        pass
+        return re.search(b'NAME:(.*?)', self.__send_atdata(b'AT+NAME=?')).group(1)
 
-    def set_name(self, para):
-        # 设置广播设备名的代码
-        pass
+    def set_name(self, name):
+        if self.__send_atdata(b'AT+NAME=' + name) \
+                == b'AT+NAME=' + name + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
     def get_conparams(self):
-        # 查询连接配置的代码
-        pass
+        return re.findall(r'\d+', self.__send_atdata(b'AT+CONPARAMS=?'))
 
-    def set_conparams(self, para):
-        # 设置连接配置的代码
-        pass
+    def set_conparams(self, connection_delay=40, slave_delay=0, parameter_exception=20):
+        set_data = b'AT+CONPARAMS=' + str(connection_delay).encode() + b',' \
+                   + str(slave_delay).encode() + b',' + str(parameter_exception).encode()
+        if self.__send_atdata(set_data) == set_data + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
-    def disconnect(self):
-        # 断开
-        pass
+    def disconnect(self, con=0):
+        if self.__send_atdata(b'AT+DISCON=' + str(con).encode()) \
+                == b'AT+DISCON=' + str(con).encode() + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
     def get_mac(self):
-        # 查询mac
-        pass
+        return re.search(b'MAC:(\w+)', self.__send_atdata(b'AT+MAC=?')).group(1)
 
-    def set_mac(self, para):
-        # 设置mac
-        pass
+    def set_mac(self, mac):
+        if self.__send_atdata(b'AT+MAC=' + mac) \
+                == b'AT+MAC=' + mac + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
     def get_bondmac(self):
         # 查询绑定mac
