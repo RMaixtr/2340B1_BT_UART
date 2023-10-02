@@ -22,6 +22,7 @@ class Bluetooth(threading.Thread):
         self.bytesize = bytesize
         self.stopbits = stopbits
         self.timeout = timeout
+        self.startflag = True
         self.datacallback = None
         self.statecallback = None
         self.isatreturn = False
@@ -30,6 +31,8 @@ class Bluetooth(threading.Thread):
         self.ser.flushInput()
 
     def close(self):
+        self.startflag = False
+        self.join()
         self.ser.close()
 
     def write(self, data):
@@ -37,7 +40,7 @@ class Bluetooth(threading.Thread):
         self.ser.write(data)
 
     def run(self):
-        while True:
+        while self.startflag:
             count = self.ser.inWaiting()
             if count != 0:
                 data = self.ser.read(count)
