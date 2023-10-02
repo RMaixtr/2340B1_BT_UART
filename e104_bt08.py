@@ -14,7 +14,7 @@ AT_ROLE_HOST, AT_ROLE_SLAVE = b'0', b'1'
 AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = b'0', b'1', b'2'
 
 
-class Bluetooth(threading.Thread):
+class e104_bt08(threading.Thread):
 
     def __init__(self, baudrate=115200, bytesize=8, stopbits=1, timeout=1):
         threading.Thread.__init__(self)
@@ -294,10 +294,3 @@ class Bluetooth(threading.Thread):
     def bondenable(self, para):
         # 绑定mac使能
         pass
-
-
-if __name__ == "__main__":
-    blu = Bluetooth()
-    blu.start()
-    print(blu.set_advdata(b'\x00'))
-    blu.close()
