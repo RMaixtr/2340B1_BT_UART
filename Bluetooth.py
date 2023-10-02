@@ -6,11 +6,12 @@ import queue
 
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
     b'\r\n STA:connect\r\n', b'\r\n disconnec\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
-AT_BAUD = {"0": 1200, "1": 2400, "2": 4800, '3': 9600, "4": 14400, "5": 19200, "6": 28800, "7": 38400,
-           "8": 57600, "9": 76800, "10": 115200, "11": 230400, "12": 500000, "13": 1000000}
-AT_PARITY_NONE, AT_PARITY_ODD, AT_PARITY_EVEN = "0", "1", "2"
-AT_ROLE_HOST, AT_ROLE_SLAVE = "0", "1"
-AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = "0", "1", "2"
+AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19200, b'6': 28800,
+           b'7': 38400, b'8': 57600, b'9': 76800, b'10': 115200, b'11': 230400, b'12': 500000, b'13': 1000000}
+
+AT_PARITY_NONE, AT_PARITY_ODD, AT_PARITY_EVEN = b'0', b'1', b'2'
+AT_ROLE_HOST, AT_ROLE_SLAVE = b'0', b'1'
+AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = b'0', b'1', b'2'
 
 
 class Bluetooth(threading.Thread):
@@ -48,19 +49,19 @@ class Bluetooth(threading.Thread):
                 print(data)
                 if self.isatreturn:
                     self.isatreturn = False
-                    err = re.search(r'\+ERROR (\d)', str(data))
+                    err = re.search(b'\+ERROR (\d)', data)
                     if err is not None:
-                        if err.group(1) == "1":
-                            raise Exception("长度不匹配")
-                        elif err.group(1) == "2":
-                            raise Exception("超过量程")
-                        elif err.group(1) == "3":
-                            raise Exception("未找到参数")
-                        elif err.group(1) == "4":
-                            raise Exception("不支持该指令")
-                        elif err.group(1) == "5":
-                            raise Exception("保存flash失败")
-                        elif err.group(1) == "6":
+                        if err.group(1) == b'1':
+                            raise Exception('长度不匹配')
+                        elif err.group(1) == b'2':
+                            raise Exception('超过量程')
+                        elif err.group(1) == b'3':
+                            raise Exception('未找到参数')
+                        elif err.group(1) == b'4':
+                            raise Exception('不支持该指令')
+                        elif err.group(1) == b'5':
+                            raise Exception('保存flash失败')
+                        elif err.group(1) == b'6':
                             raise Exception("参数非法")
                         else:
                             raise Exception("未知错误")
@@ -81,7 +82,7 @@ class Bluetooth(threading.Thread):
                     else:
                         if self.datacallback:
                             self.datacallback(othdata)
-            time.sleep(0.01)
+            time.sleep(0.05)
 
     def __send_atdata(self, data):
         self.ser.flushInput()
@@ -133,31 +134,22 @@ class Bluetooth(threading.Thread):
             return False
 
     def get_baudrate(self):
-        baudnum = re.search(r'BAUD:(\d+)', str(self.__send_atdata(b'AT+BAUD=?')))
+        baudnum = re.search(b'BAUD:(\d+)', self.__send_atdata(b'AT+BAUD=?'))
         return AT_BAUD[baudnum.group(1)]
 
     def set_baudrate(self, baudrate):
-        strbaud = str(baudrate)
-        if strbaud in AT_BAUD:
-            if self.__send_atdata(b'AT+BAUD=' + strbaud.encode()) \
-                    == b'AT+BAUD=' + strbaud.encode() + b'\r\n+OK\r\n':
-                self.ser.baudrate = AT_BAUD[strbaud]
-                return True
-            else:
-                return False
-        else:
-            for key, val in AT_BAUD.items():
-                if val == baudrate:
-                    if self.__send_atdata(b'AT+BAUD=' + key.encode()) \
-                            == b'AT+BAUD=' + key.encode() + b'\r\n+OK\r\n':
-                        self.ser.baudrate = baudrate
-                        return True
-                    else:
-                        return False
+        for key, val in AT_BAUD.items():
+            if val == baudrate:
+                if self.__send_atdata(b'AT+BAUD=' + key.encode()) \
+                        == b'AT+BAUD=' + key.encode() + b'\r\n+OK\r\n':
+                    self.ser.baudrate = baudrate
+                    return True
+                else:
+                    return False
         return False
 
     def get_parity(self):
-        return re.search(r'PARI:(\d)', str(self.__send_atdata(b'AT+PARI=?'))).group(1)
+        return re.search(b'PARI:(\d)', self.__send_atdata(b'AT+PARI=?')).group(1)
 
     def set_parity(self, parity):
         if self.__send_atdata(b'AT+PARI=' + parity.encode()) \
@@ -173,7 +165,7 @@ class Bluetooth(threading.Thread):
             return False
 
     def get_role(self):
-        return re.search(r'ROLE:(\d)', str(self.__send_atdata(b'AT+ROLE=?'))).group(1)
+        return re.search(b'ROLE:(\d)', self.__send_atdata(b'AT+ROLE=?')).group(1)
 
     def set_role(self, role):
         if self.__send_atdata(b'AT+ROLE=' + role.encode()) \
@@ -183,7 +175,7 @@ class Bluetooth(threading.Thread):
             return False
 
     def get_adv(self):
-        return re.search(r'ADV:(\d)', str(self.__send_atdata(b'AT+ADV=?'))).group(1)
+        return re.search(b'ADV:(\d)', self.__send_atdata(b'AT+ADV=?')).group(1)
 
     def set_adv(self, adv):
         if self.__send_atdata(b'AT+ADV=' + adv.encode()) \
@@ -193,12 +185,15 @@ class Bluetooth(threading.Thread):
             return False
 
     def get_advdata(self):
-        # 查询广播数据的代码
-        pass
+        return re.search(b'ADVDAT:(.*?)\r\n', self.__send_atdata(b'AT+ADVDAT=?')).group(1)
 
-    def set_advdat(self, para):
-        # 设置广播数据的代码
-        pass
+    def set_advdata(self, data, vendor_data=b'\x01\x02'):
+        length = len(b'\xff' + vendor_data + data)
+        set_data = b'AT+ADVDAT=' + bytes.fromhex(format(length, '02x')) + b'\xff' + vendor_data + data
+        if self.__send_atdata(set_data) == set_data + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
     def get_advintv(self):
         # 查询广播间隙的代码
@@ -304,5 +299,5 @@ class Bluetooth(threading.Thread):
 if __name__ == "__main__":
     blu = Bluetooth()
     blu.start()
-    print(blu.get_baudrate())
+    print(blu.set_advdata(b'\x00'))
     blu.close()
