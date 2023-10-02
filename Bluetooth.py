@@ -5,34 +5,16 @@ import time
 from time import *
 import queue
 
+AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
+    b'\r\n STA:connect\r\n', b'\r\n disconnec\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
+AT_BAUD = {"0": 1200, "1": 2400, "2": 4800, '3': 9600, "4": 14400, "5": 19200, "6": 28800, "7": 38400,
+           "8": 57600, "9": 76800, "10": 115200, "11": 230400, "12": 500000, "13": 1000000}
+AT_PARITY_NONE, AT_PARITY_ODD, AT_PARITY_EVEN = "0", "1", "2"
+AT_ROLE_HOST, AT_ROLE_SLAVE = "0", "1"
+AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = "0", "1", "2"
+
 
 class Bluetooth(threading.Thread):
-    STATE = {b'\r\n STA:connect\r\n': "连接成功",
-             b'\r\n disconnec\r\n': "连接断开",
-             b'\r\n STA:wakeup\r\n': "系统唤醒",
-             b'\r\n STA:sleep\r\n': "睡眠模式"}
-    BAUD = {"0": 1200,
-            "1": 2400,
-            "2": 4800,
-            '3': 9600,
-            "4": 14400,
-            "5": 19200,
-            "6": 28800,
-            "7": 38400,
-            "8": 57600,
-            "9": 76800,
-            "10": 115200,
-            "11": 230400,
-            "12": 500000,
-            "13": 1000000}
-    PARI = {"0": "无检验",
-            "1": "奇校验",
-            "2": "偶校验"}
-    ROLE = {"0": "从机",
-            "1": "主机"}
-    ADV = {"0": "关闭广播",
-           "1": "普通广播",
-           "2": "iBeacon广播"}
 
     def __init__(self, baudrate=115200, bytesize=8, stopbits=1, timeout=1):
         threading.Thread.__init__(self)
@@ -82,10 +64,18 @@ class Bluetooth(threading.Thread):
                             raise Exception("未知错误")
                 else:
                     othdata = self.q.get()
-                    if othdata in self.STATE:
-                        state = self.statecallback(self.STATE[othdata])
+                    if othdata == AT_STATE_CONNECT:
                         if self.statecallback:
-                            self.statecallback(state)
+                            self.statecallback(AT_STATE_CONNECT)
+                    elif othdata == AT_STATE_DISCONNECT:
+                        if self.statecallback:
+                            self.statecallback(AT_STATE_DISCONNECT)
+                    elif othdata == AT_STATE_WAKEUP:
+                        if self.statecallback:
+                            self.statecallback(AT_STATE_WAKEUP)
+                    elif othdata == AT_STATE_SLEEP:
+                        if self.statecallback:
+                            self.statecallback(AT_STATE_SLEEP)
                     else:
                         if self.datacallback:
                             self.datacallback(othdata)
@@ -141,19 +131,19 @@ class Bluetooth(threading.Thread):
 
     def get_baudrate(self):
         baudnum = re.search(r'BAUD:(\d+)', str(self.__send_atdata(b'AT+BAUD=?')))
-        return self.BAUD[baudnum]
+        return AT_BAUD[baudnum]
 
     def set_baudrate(self, baudrate):
         strbaud = str(baudrate)
-        if strbaud in self.BAUD:
+        if strbaud in AT_BAUD:
             if self.__send_atdata(b'AT+BAUD=' + strbaud.encode()) \
                     == b'AT+BAUD=' + strbaud.encode() + b'\r\n+OK\r\n':
-                self.ser.baudrate = self.BAUD[strbaud]
+                self.ser.baudrate = AT_BAUD[strbaud]
                 return True
             else:
                 return False
         else:
-            for key, val in self.STATE.items():
+            for key, val in AT_BAUD.items():
                 if val == baudrate:
                     if self.__send_atdata(b'AT+BAUD=' + key.encode()) \
                             == b'AT+BAUD=' + key.encode() + b'\r\n+OK\r\n':
@@ -164,43 +154,37 @@ class Bluetooth(threading.Thread):
         return False
 
     def get_parity(self):
-        parinum = re.search(r'PARI:(\d)', str(self.__send_atdata(b'AT+PARI=?')))
-        return self.PARI[parinum]
+        return re.search(r'PARI:(\d)', str(self.__send_atdata(b'AT+PARI=?')))
 
     def set_parity(self, parity):
-        strbaud = str(parity)
-        if self.__send_atdata(b'AT+PARI=' + strbaud.encode()) \
-                == b'AT+PARI=' + strbaud.encode() + b'\r\n+OK\r\n':
-            if parity == 0:
+        if self.__send_atdata(b'AT+PARI=' + parity.encode()) \
+                == b'AT+PARI=' + parity.encode() + b'\r\n+OK\r\n':
+            if parity == AT_PARITY_NONE:
                 self.ser.parity = serial.PARITY_NONE
-            elif parity == 1:
+            elif parity == AT_PARITY_ODD:
                 self.ser.parity = serial.PARITY_ODD
-            elif parity == 2:
+            elif parity == AT_PARITY_EVEN:
                 self.ser.parity = serial.PARITY_EVEN
             return True
         else:
             return False
 
     def get_role(self):
-        rolenum = re.search(r'ROLE:(\d)', str(self.__send_atdata(b'AT+ROLE=?')))
-        return self.ROLE[rolenum]
+        return re.search(r'ROLE:(\d)', str(self.__send_atdata(b'AT+ROLE=?')))
 
     def set_role(self, role):
-        strrole = str(role)
-        if self.__send_atdata(b'AT+ROLE=' + strrole.encode()) \
-                == b'AT+ROLE=' + strrole.encode() + b'\r\n+OK\r\n':
+        if self.__send_atdata(b'AT+ROLE=' + role.encode()) \
+                == b'AT+ROLE=' + role.encode() + b'\r\n+OK\r\n':
             return True
         else:
             return False
 
     def get_adv(self):
-        advnum = re.search(r'ADV:(\d)', str(self.__send_atdata(b'AT+ADV=?')))
-        return self.ADV[advnum]
+        return re.search(r'ADV:(\d)', str(self.__send_atdata(b'AT+ADV=?')))
 
     def set_adv(self, adv):
-        stradv = str(adv)
-        if self.__send_atdata(b'AT+ADV=' + stradv.encode()) \
-                == b'AT+ADV=' + stradv.encode() + b'\r\n+OK\r\n':
+        if self.__send_atdata(b'AT+ADV=' + adv.encode()) \
+                == b'AT+ADV=' + adv.encode() + b'\r\n+OK\r\n':
             return True
         else:
             return False
