@@ -2,7 +2,6 @@ import threading
 import serial
 import re
 import time
-from time import *
 import queue
 
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
@@ -85,13 +84,14 @@ class Bluetooth(threading.Thread):
         self.ser.flushInput()
         self.isatreturn = True
         self.ser.write(data)
-        start_time = time()
+        timecont = 0
         while True:
             if not self.q.empty():
                 return self.q.get()
-            if time() - start_time > self.timeout:
+            time.sleep(0.01)
+            timecont += 1
+            if timecont >= self.timeout * 100:
                 raise Exception("超时,请检测是否处于AT模式及硬件连接")
-            time.sleep(0.1)
 
     def set_data_callback(self, function):
         self.datacallback = function
@@ -131,7 +131,7 @@ class Bluetooth(threading.Thread):
 
     def get_baudrate(self):
         baudnum = re.search(r'BAUD:(\d+)', str(self.__send_atdata(b'AT+BAUD=?')))
-        return AT_BAUD[baudnum]
+        return AT_BAUD[baudnum.group(1)]
 
     def set_baudrate(self, baudrate):
         strbaud = str(baudrate)
@@ -154,7 +154,7 @@ class Bluetooth(threading.Thread):
         return False
 
     def get_parity(self):
-        return re.search(r'PARI:(\d)', str(self.__send_atdata(b'AT+PARI=?')))
+        return re.search(r'PARI:(\d)', str(self.__send_atdata(b'AT+PARI=?'))).group(1)
 
     def set_parity(self, parity):
         if self.__send_atdata(b'AT+PARI=' + parity.encode()) \
@@ -170,7 +170,7 @@ class Bluetooth(threading.Thread):
             return False
 
     def get_role(self):
-        return re.search(r'ROLE:(\d)', str(self.__send_atdata(b'AT+ROLE=?')))
+        return re.search(r'ROLE:(\d)', str(self.__send_atdata(b'AT+ROLE=?'))).group(1)
 
     def set_role(self, role):
         if self.__send_atdata(b'AT+ROLE=' + role.encode()) \
@@ -180,7 +180,7 @@ class Bluetooth(threading.Thread):
             return False
 
     def get_adv(self):
-        return re.search(r'ADV:(\d)', str(self.__send_atdata(b'AT+ADV=?')))
+        return re.search(r'ADV:(\d)', str(self.__send_atdata(b'AT+ADV=?'))).group(1)
 
     def set_adv(self, adv):
         if self.__send_atdata(b'AT+ADV=' + adv.encode()) \
@@ -300,4 +300,6 @@ class Bluetooth(threading.Thread):
 
 if __name__ == "__main__":
     blu = Bluetooth()
+    blu.start()
     print(blu.get_baudrate())
+    blu.close()
