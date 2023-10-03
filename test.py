@@ -7,8 +7,7 @@ def bt08_data_callback(self, data):
 
 
 def bt08_state_callback(self, data):
-    if e104_bt08.AT_STATE_CONNECT:
-        self.write("连接成功".encode())
+    print("statechange")
 
 
 if __name__ == '__main__':
@@ -16,7 +15,10 @@ if __name__ == '__main__':
     blu.start()
     blu.set_data_callback(bt08_data_callback)
     blu.set_state_callback(bt08_state_callback)
-    print(blu.test())
+    try:
+        blu.enter_at()
+    except Exception:
+        blu.reset()
     while True:
         user_input = input("按下 Enter 键来结束程序：")
         if user_input == "":
