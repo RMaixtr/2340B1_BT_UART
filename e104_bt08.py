@@ -60,7 +60,6 @@ class e104_bt08(threading.Thread):
                     raise
 
     def run(self):
-
         while self.startflag:
             count = self.ser.inWaiting()
             if count != 0:
@@ -91,6 +90,9 @@ class e104_bt08(threading.Thread):
                         if self.datacallback:
                             self.datacallback(self, othdata)
             time.sleep(0.05)
+
+    def getstate(self):
+        return self.state
 
     def __send_atdata(self, data):
         self.ser.flushInput()
@@ -254,7 +256,7 @@ class e104_bt08(threading.Thread):
             return False
 
     def get_conparams(self):
-        return re.findall(r'\d+', self.__send_atdata(b'AT+CONPARAMS=?'))
+        return re.findall(b'\d+', self.__send_atdata(b'AT+CONPARAMS=?'))
 
     def set_conparams(self, connection_delay=40, slave_delay=0, parameter_exception=20):
         set_data = b'AT+CONPARAMS=' + str(connection_delay).encode() + b',' \
@@ -282,28 +284,34 @@ class e104_bt08(threading.Thread):
             return False
 
     def get_bondmac(self):
-        # 查询绑定mac
-        pass
+        return re.findall(b'MAC:(\w+)', self.__send_atdata(b'AT+BONDMAC=?'))
 
-    def set_bondmac(self, para):
-        # 绑定mac
-        pass
+    def set_bondmac(self, mac):
+        if self.__send_atdata(b'AT+BONDMAC=' + mac) \
+                == b'AT+BONDMAC=' + mac + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
     def get_mtu(self):
-        # 查询mtu
-        pass
+        return int(re.search(b'MTU:(\d+)', self.__send_atdata(b'AT+MTU=?')).group(1))
 
-    def set_mtu(self, para):
-        # 设置mtu
-        pass
+    def set_mtu(self, mtu):
+        if self.__send_atdata(b'AT+MTU=' + str(mtu).encode()) \
+                == b'AT+MTU=' + str(mtu).encode() + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
     def get_scanwindow(self):
-        # 查询扫描窗口
-        pass
+        return int(re.search(b'SCANWND:(\d+)', self.__send_atdata(b'AT+SCANWND=?')).group(1))
 
-    def set_scanwindow(self, para):
-        # 设置扫描窗口
-        pass
+    def set_scanwindow(self, scanwnd):
+        if self.__send_atdata(b'AT+SCANWND=' + str(scanwnd).encode()) \
+                == b'AT+SCANWND=' + str(scanwnd).encode() + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
     def get_uuidserver(self):
         # 查询服务 UUID
