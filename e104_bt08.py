@@ -12,6 +12,8 @@ AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19
 AT_PARITY_NONE, AT_PARITY_ODD, AT_PARITY_EVEN = b'0', b'1', b'2'
 AT_ROLE_HOST, AT_ROLE_SLAVE = b'0', b'1'
 AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = b'0', b'1', b'2'
+AT_PWR_8DBM, AT_PWR_0DBM, AT_PWR_NEG_5DBM, AT_PWR_NEG_20DBM = b'0', b'1', b'2', b'3'
+AT_BOND_ABLE,AT_BOND_DISABLE = b'0', b'1'
 
 
 class e104_bt08(threading.Thread):
@@ -91,7 +93,7 @@ class e104_bt08(threading.Thread):
                             self.datacallback(self, othdata)
             time.sleep(0.05)
 
-    def getstate(self):
+    def get_state(self):
         return self.state
 
     def __send_atdata(self, data):
@@ -314,41 +316,65 @@ class e104_bt08(threading.Thread):
             return False
 
     def get_uuidserver(self):
-        # 查询服务 UUID
-        pass
+        return int(re.search(b'UUIDSVR:(\d+)', self.__send_atdata(b'AT+UUIDSVR=?')).group(1))
 
-    def set_uuidserver(self, para):
-        # 设置服务 UUID
-        pass
+    def set_uuidserver(self, uuidserver):
+        if self.__send_atdata(b'AT+UUIDSVR=' + uuidserver) \
+                == b'AT+UUIDSVR=' + uuidserver + b'\r\n+OK\r\n':
+            return True
+        else:
+            return False
 
-    def set_auth(self, para):
-        # 设置空中配置认证密码
-        pass
+    def set_auth(self, password):
+        if self.__send_atdata(b'AT+AUTH=' + str(password).encode()) \
+                == b'AT+AUTH=' + str(password).encode() + b'\r\n':
+            return True
+        else:
+            return False
 
-    def set_upauth(self, para):
-        # 修改空中认证密码
-        pass
+    def get_upauth(self):
+        return re.search(b'AUTH:(\w+)', self.__send_atdata(b'AT+UPAUTH=?')).group(1)
+
+    def set_upauth(self, password):
+        if self.__send_atdata(b'AT+UPAUTH=' + str(password).encode()) \
+                == b'AT+UPAUTH=' + str(password).encode() + b'\r\n':
+            return True
+        else:
+            return False
 
     def sleep(self, para):
-        # 进入睡眠
-        pass
+        if self.__send_atdata(b'AT+SLEEP=' + str(para).encode()) \
+                == b'AT+SLEEP=' + str(para).encode() + b'\r\n':
+            return True
+        else:
+            return False
 
     def set_atestate(self, para):
-        # 设置ATE 运行状态
-        pass
+        if self.__send_atdata(b'AT+SLEEP=' + str(para).encode()) \
+                == b'AT+SLEEP=' + str(para).encode() + b'\r\n':
+            return True
+        else:
+            return False
 
     def get_power(self):
-        # 查询发射功率
-        pass
+        return re.search(b'PWR:(\d)', self.__send_atdata(b'AT+PWR=?')).group(1)
 
-    def set_power(self, para):
-        # 设置发射功率
-        pass
+    def set_power(self, pwr):
+        if self.__send_atdata(b'AT+SLEEP=' + pwr) \
+                == b'AT+SLEEP=' + pwr + b'\r\n':
+            return True
+        else:
+            return False
 
     def get_version(self):
-        # 查询软件版本
-        pass
+        lines = str(self.__send_atdata(b'AT+VER')).split('\r\n')
+        return lines[len(lines)-1]
 
-    def bondenable(self, para):
-        # 绑定mac使能
-        pass
+    def get_bondenable(self):
+        return re.search(b'BOND:(\d)', self.__send_atdata(b'AT+BOND=?')).group(1)
+
+    def set_bondenable(self,para):
+        if self.__send_atdata(b'AT+BOND=' + para) \
+                == b'AT+BOND=' + para + b'\r\n+OK\r\n':
+        else:
+            return False
