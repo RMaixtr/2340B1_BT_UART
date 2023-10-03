@@ -5,7 +5,7 @@ import time
 import queue
 
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
-    b'\r\n STA:connect\r\n', b'\r\n disconnec\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
+    b'\r\n STA:connect\r\n', b'\r\n disconnect\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
 AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19200, b'6': 28800,
            b'7': 38400, b'8': 57600, b'9': 76800, b'10': 115200, b'11': 230400, b'12': 500000, b'13': 1000000}
 
@@ -86,6 +86,12 @@ class e104_bt08(threading.Thread):
 
     def __send_atdata(self, data):
         self.ser.flushInput()
+        timecont = 0
+        while self.isatreturn:
+            time.sleep(0.01)
+            timecont += 1
+            if timecont >= self.timeout * 100:
+                raise Exception("超时,请检测是否处于AT模式及硬件连接")
         self.isatreturn = True
         self.ser.write(data)
         timecont = 0
@@ -110,7 +116,7 @@ class e104_bt08(threading.Thread):
             return False
 
     def enter_at(self):
-        if self.__send_atdata(b'+++') == b'+++\r\n+OK\r\n':
+        if self.__send_atdata(b'+++') == b'enter_at_mode':
             return True
         else:
             return False
