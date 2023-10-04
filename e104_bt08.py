@@ -139,34 +139,19 @@ class e104_bt08(threading.Thread):
         self.statecallback = function
 
     def test(self):
-        if self.__send_atdata(b'AT') == b'AT\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT')
 
     def enter_at(self):
-        if self.__send_atdata(b'+++') == b'enter_at_mode':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'+++')
 
     def exit_at(self):
-        if self.__send_atdata(b'AT+EXIT') == b'AT+EXIT\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+EXIT')
 
     def reset(self):
-        if self.__send_atdata(b'AT+RESET') == b'AT+RESET\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+RESET')
 
     def restore(self):
-        if self.__send_atdata(b'AT+RESTORE') == b'AT+RESTORE\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+RESTORE')
 
     def get_baudrate(self):
         baudnum = re.search(b'BAUD:(\d+)', self.__send_atdata(b'AT+BAUD=?'))
@@ -187,37 +172,25 @@ class e104_bt08(threading.Thread):
         return re.search(b'PARI:(\d)', self.__send_atdata(b'AT+PARI=?')).group(1)
 
     def set_parity(self, parity):
-        if self.__send_atdata(b'AT+PARI=' + parity.encode()) \
-                == b'AT+PARI=' + parity.encode() + b'\r\n+OK\r\n':
-            if parity == AT_PARITY_NONE:
-                self.ser.parity = serial.PARITY_NONE
-            elif parity == AT_PARITY_ODD:
-                self.ser.parity = serial.PARITY_ODD
-            elif parity == AT_PARITY_EVEN:
-                self.ser.parity = serial.PARITY_EVEN
-            return True
-        else:
-            return False
+        if parity == AT_PARITY_NONE:
+            self.ser.parity = serial.PARITY_NONE
+        elif parity == AT_PARITY_ODD:
+            self.ser.parity = serial.PARITY_ODD
+        elif parity == AT_PARITY_EVEN:
+            self.ser.parity = serial.PARITY_EVEN
+        return b'+OK\r\n' in self.__send_atdata(b'AT+PARI=' + parity.encode())
 
     def get_role(self):
         return re.search(b'ROLE:(\d)', self.__send_atdata(b'AT+ROLE=?')).group(1)
 
     def set_role(self, role):
-        if self.__send_atdata(b'AT+ROLE=' + role.encode()) \
-                == b'AT+ROLE=' + role.encode() + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+ROLE=' + role.encode())
 
     def get_adv(self):
         return re.search(b'ADV:(\d)', self.__send_atdata(b'AT+ADV=?')).group(1)
 
     def set_adv(self, adv):
-        if self.__send_atdata(b'AT+ADV=' + adv.encode()) \
-                == b'AT+ADV=' + adv.encode() + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+ADV=' + adv.encode())
 
     def get_advdata(self):
         return re.search(b'ADVDAT:(.*?)\r\n', self.__send_atdata(b'AT+ADVDAT=?')).group(1)
@@ -225,37 +198,23 @@ class e104_bt08(threading.Thread):
     def set_advdata(self, data, vendor_data=b'\x01\x02'):
         length = len(b'\xff' + vendor_data + data)
         set_data = b'AT+ADVDAT=' + bytes.fromhex(format(length, '02x')) + b'\xff' + vendor_data + data
-        if self.__send_atdata(set_data) == set_data + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(set_data)
 
     def set_ibeacon_advdata(self, uuid, major, minor, power):
         set_data = b'AT+ADVDAT=\x1a\xff\x4c\x00\x02\x15' + uuid + major + minor + power
-        if self.__send_atdata(set_data) == set_data + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(set_data)
 
     def get_advintv(self):
         return int(re.search(b'ADVINTV:(\d+)', self.__send_atdata(b'AT+ADVINTV=?')).group(1))
 
     def set_advintv(self, advintv=32):
-        if self.__send_atdata(b'AT+ADVINTV=' + str(advintv).encode()) \
-                == b'AT+ADVINTV=' + str(advintv).encode() + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+ADVINTV=' + str(advintv).encode())
 
     def get_name(self):
         return re.search(b'NAME:(.*?)', self.__send_atdata(b'AT+NAME=?')).group(1)
 
     def set_name(self, name):
-        if self.__send_atdata(b'AT+NAME=' + name) \
-                == b'AT+NAME=' + name + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+NAME=' + name)
 
     def get_conparams(self):
         return re.findall(b'\d+', self.__send_atdata(b'AT+CONPARAMS=?'))
@@ -263,108 +222,61 @@ class e104_bt08(threading.Thread):
     def set_conparams(self, connection_delay=40, slave_delay=0, parameter_exception=20):
         set_data = b'AT+CONPARAMS=' + str(connection_delay).encode() + b',' \
                    + str(slave_delay).encode() + b',' + str(parameter_exception).encode()
-        if self.__send_atdata(set_data) == set_data + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(set_data)
 
     def disconnect(self, con=0):
-        if self.__send_atdata(b'AT+DISCON=' + str(con).encode()) \
-                == b'AT+DISCON=' + str(con).encode() + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+DISCON=' + str(con).encode())
 
     def get_mac(self):
         return re.search(b'MAC:(\w+)', self.__send_atdata(b'AT+MAC=?')).group(1)
 
     def set_mac(self, mac):
-        if self.__send_atdata(b'AT+MAC=' + mac) \
-                == b'AT+MAC=' + mac + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+MAC=' + mac)
 
     def get_bondmac(self):
         return re.findall(b'MAC:(\w+)', self.__send_atdata(b'AT+BONDMAC=?'))
 
     def set_bondmac(self, mac):
-        if self.__send_atdata(b'AT+BONDMAC=' + mac) \
-                == b'AT+BONDMAC=' + mac + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+BONDMAC=' + mac)
 
     def get_mtu(self):
         return int(re.search(b'MTU:(\d+)', self.__send_atdata(b'AT+MTU=?')).group(1))
 
     def set_mtu(self, mtu):
-        if self.__send_atdata(b'AT+MTU=' + str(mtu).encode()) \
-                == b'AT+MTU=' + str(mtu).encode() + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+MTU=' + str(mtu).encode())
 
     def get_scanwindow(self):
         return int(re.search(b'SCANWND:(\d+)', self.__send_atdata(b'AT+SCANWND=?')).group(1))
 
     def set_scanwindow(self, scanwnd):
-        if self.__send_atdata(b'AT+SCANWND=' + str(scanwnd).encode()) \
-                == b'AT+SCANWND=' + str(scanwnd).encode() + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+SCANWND=' + str(scanwnd).encode())
 
     def get_uuidserver(self):
         return int(re.search(b'UUIDSVR:(\d+)', self.__send_atdata(b'AT+UUIDSVR=?')).group(1))
 
     def set_uuidserver(self, uuidserver):
-        if self.__send_atdata(b'AT+UUIDSVR=' + uuidserver) \
-                == b'AT+UUIDSVR=' + uuidserver + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+UUIDSVR=' + uuidserver)
 
     def set_auth(self, password):
-        if self.__send_atdata(b'AT+AUTH=' + str(password).encode()) \
-                == b'AT+AUTH=' + str(password).encode() + b'\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+AUTH=' + str(password).encode())
 
     def get_upauth(self):
         return re.search(b'AUTH:(\w+)', self.__send_atdata(b'AT+UPAUTH=?')).group(1)
 
     def set_upauth(self, password):
-        if self.__send_atdata(b'AT+UPAUTH=' + str(password).encode()) \
-                == b'AT+UPAUTH=' + str(password).encode() + b'\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+UPAUTH=' + str(password).encode())
 
     def sleep(self, para):
-        if self.__send_atdata(b'AT+SLEEP=' + str(para).encode()) \
-                == b'AT+SLEEP=' + str(para).encode() + b'\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+SLEEP=' + str(para).encode())
 
     def set_atestate(self, para):
-        if self.__send_atdata(b'AT+SLEEP=' + str(para).encode()) \
-                == b'AT+SLEEP=' + str(para).encode() + b'\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+ATE=' + str(para).encode())
 
     def get_power(self):
         return re.search(b'PWR:(\d)', self.__send_atdata(b'AT+PWR=?')).group(1)
 
     def set_power(self, pwr):
-        if self.__send_atdata(b'AT+SLEEP=' + pwr) \
-                == b'AT+SLEEP=' + pwr + b'\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+PWR=' + pwr)
 
     def get_version(self):
         lines = str(self.__send_atdata(b'AT+VER')).split('\r\n')
@@ -374,8 +286,4 @@ class e104_bt08(threading.Thread):
         return re.search(b'BOND:(\d)', self.__send_atdata(b'AT+BOND=?')).group(1)
 
     def set_bondenable(self, para):
-        if self.__send_atdata(b'AT+BOND=' + para) \
-                == b'AT+BOND=' + para + b'\r\n+OK\r\n':
-            return True
-        else:
-            return False
+        return b'+OK\r\n' in self.__send_atdata(b'AT+BOND=' + para)
