@@ -18,12 +18,9 @@ AT_BOND_ABLE, AT_BOND_DISABLE = b'0', b'1'
 
 class e104_bt08(threading.Thread):
 
-    def __init__(self, baudrate=115200, bytesize=8, stopbits=1, timeout=1, datacallback=None, statecallback=None):
+    def __init__(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1, datacallback=None, statecallback=None):
         threading.Thread.__init__(self)
         self.q = queue.Queue()
-        self.baudrate = baudrate
-        self.bytesize = bytesize
-        self.stopbits = stopbits
         self.timeout = timeout
         self.startflag = True
         self.datacallback = datacallback
@@ -31,7 +28,12 @@ class e104_bt08(threading.Thread):
         self.isatreturn = False
         self.atdata = None
         self.state = AT_STATE_DISCONNECT
-        self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, bytesize=bytesize, stopbits=stopbits)
+        if parity == AT_PARITY_ODD:
+            self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=serial.PARITY_ODD)
+        elif parity == AT_PARITY_EVEN:
+            self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=serial.PARITY_EVEN)
+        else:
+            self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=serial.PARITY_NONE)
         self.start()
         self.__init()
 
@@ -160,12 +162,8 @@ class e104_bt08(threading.Thread):
     def set_baudrate(self, baudrate):
         for key, val in AT_BAUD.items():
             if val == baudrate:
-                if self.__send_atdata(b'AT+BAUD=' + key.encode()) \
-                        == b'AT+BAUD=' + key.encode() + b'\r\n+OK\r\n':
-                    self.ser.baudrate = baudrate
-                    return True
-                else:
-                    return False
+                self.ser.baudrate = baudrate
+                return b'+OK\r\n' in self.__send_atdata(b'AT+BAUD=' + key.encode())
         return False
 
     def get_parity(self):
