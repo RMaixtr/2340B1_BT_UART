@@ -13,7 +13,7 @@ AT_PARITY_NONE, AT_PARITY_ODD, AT_PARITY_EVEN = b'0', b'1', b'2'
 AT_ROLE_HOST, AT_ROLE_SLAVE = b'0', b'1'
 AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = b'0', b'1', b'2'
 AT_PWR_8DBM, AT_PWR_0DBM, AT_PWR_NEG_5DBM, AT_PWR_NEG_20DBM = b'0', b'1', b'2', b'3'
-AT_BOND_ABLE,AT_BOND_DISABLE = b'0', b'1'
+AT_BOND_ABLE, AT_BOND_DISABLE = b'0', b'1'
 
 
 class e104_bt08(threading.Thread):
@@ -368,13 +368,14 @@ class e104_bt08(threading.Thread):
 
     def get_version(self):
         lines = str(self.__send_atdata(b'AT+VER')).split('\r\n')
-        return lines[len(lines)-1]
+        return lines[len(lines) - 1]
 
     def get_bondenable(self):
         return re.search(b'BOND:(\d)', self.__send_atdata(b'AT+BOND=?')).group(1)
 
-    def set_bondenable(self,para):
+    def set_bondenable(self, para):
         if self.__send_atdata(b'AT+BOND=' + para) \
                 == b'AT+BOND=' + para + b'\r\n+OK\r\n':
+            return True
         else:
             return False
