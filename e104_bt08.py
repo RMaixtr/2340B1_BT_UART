@@ -113,7 +113,7 @@ class e104_bt08(threading.Thread):
         return self.state
 
     def __send_atdata(self, data):
-        if not self.isatmode:
+        if not self.isatmode and data != b'+++':
             return b''
         self.ser.flushInput()
         timecont = 0
