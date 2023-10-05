@@ -13,6 +13,7 @@ AT_ROLE_HOST, AT_ROLE_SLAVE = b'0', b'1'
 AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = b'0', b'1', b'2'
 AT_PWR_8DBM, AT_PWR_0DBM, AT_PWR_NEG_5DBM, AT_PWR_NEG_20DBM = b'0', b'1', b'2', b'3'
 AT_BOND_ABLE, AT_BOND_DISABLE = b'0', b'1'
+AT_ATE_OFF, AT_ATE_OPEN = b'0', b'1'
 
 
 class e104_bt08(threading.Thread):
@@ -165,7 +166,7 @@ class e104_bt08(threading.Thread):
             return True
         else:
             self.isatmode = False
-            return  False
+            return False
 
     def exit_at(self):
         if b'+OK\r\n' in self.__send_atdata(b'AT+EXIT'):
@@ -235,13 +236,13 @@ class e104_bt08(threading.Thread):
         return b'+OK\r\n' in self.__send_atdata(b'AT+ADVINTV=' + str(advintv).encode())
 
     def get_name(self):
-        return re.search(b'NAME:(.*?)', self.__send_atdata(b'AT+NAME=?')).group(1)
+        return re.search(b'NAME:(\S+)', self.__send_atdata(b'AT+NAME=?')).group(1)
 
     def set_name(self, name):
         return b'+OK\r\n' in self.__send_atdata(b'AT+NAME=' + name)
 
     def get_conparams(self):
-        return re.findall(b'\d+', self.__send_atdata(b'AT+CONPARAMS=?'))
+        return [int(byte_str) for byte_str in re.findall(b'\d+', self.__send_atdata(b'AT+CONPARAMS=?'))]
 
     def set_conparams(self, connection_delay=40, slave_delay=0, parameter_exception=20):
         set_data = b'AT+CONPARAMS=' + str(connection_delay).encode() + b',' \
@@ -279,22 +280,28 @@ class e104_bt08(threading.Thread):
         return int(re.search(b'UUIDSVR:(\d+)', self.__send_atdata(b'AT+UUIDSVR=?')).group(1))
 
     def set_uuidserver(self, uuidserver):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+UUIDSVR=' + uuidserver)
+        return b'+OK\r\n' in self.__send_atdata(b'AT+UUIDSVR=' + str(uuidserver).encode())
 
     def set_auth(self, password):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+AUTH=' + str(password).encode())
+        self.__send_atdata(b'AT+AUTH=' + password)
 
     def get_upauth(self):
         return re.search(b'AUTH:(\w+)', self.__send_atdata(b'AT+UPAUTH=?')).group(1)
 
     def set_upauth(self, password):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+UPAUTH=' + str(password).encode())
+        return b'+OK\r\n' in self.__send_atdata(b'AT+UPAUTH=' + password)
 
     def sleep(self, para):
         return b'+OK\r\n' in self.__send_atdata(b'AT+SLEEP=' + str(para).encode())
 
+    def get_atestate(self):
+        if b'AT' in self.__send_atdata(b'AT'):
+            return AT_ATE_OPEN
+        else:
+            return AT_ATE_OFF
+
     def set_atestate(self, para):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+ATE=' + str(para).encode())
+        return b'+OK\r\n' in self.__send_atdata(b'ATE' + para)
 
     def get_power(self):
         return re.search(b'PWR:(\d)', self.__send_atdata(b'AT+PWR=?')).group(1)
@@ -303,8 +310,8 @@ class e104_bt08(threading.Thread):
         return b'+OK\r\n' in self.__send_atdata(b'AT+PWR=' + pwr)
 
     def get_version(self):
-        lines = str(self.__send_atdata(b'AT+VER')).split('\r\n')
-        return lines[len(lines) - 1]
+        lines = str(self.__send_atdata(b'AT+VER').decode('utf-8')).strip().split('\r\n')
+        return lines[-1]
 
     def get_bondenable(self):
         return re.search(b'BOND:(\d)', self.__send_atdata(b'AT+BOND=?')).group(1)
