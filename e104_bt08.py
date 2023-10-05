@@ -8,7 +8,6 @@ AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
     b'\r\n STA:connect\r\n', b'\r\n disconnect\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
 AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19200, b'6': 28800,
            b'7': 38400, b'8': 57600, b'9': 76800, b'10': 115200, b'11': 230400, b'12': 500000, b'13': 1000000}
-
 AT_PARITY_NONE, AT_PARITY_ODD, AT_PARITY_EVEN = b'0', b'1', b'2'
 AT_ROLE_HOST, AT_ROLE_SLAVE = b'0', b'1'
 AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = b'0', b'1', b'2'
@@ -27,6 +26,8 @@ class e104_bt08(threading.Thread):
         self.statecallback = statecallback
         self.isatreturn = False
         self.atdata = None
+        self.rebootstart = False
+        self.isatmode = True
         self.state = AT_STATE_DISCONNECT
         if parity == AT_PARITY_ODD:
             self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=serial.PARITY_ODD)
@@ -41,6 +42,9 @@ class e104_bt08(threading.Thread):
         self.startflag = False
         self.join()
         self.ser.close()
+
+    def is_at_mode(self):
+        return self.isatmode
 
     def write(self, data):
         self.ser.flushInput()
@@ -62,43 +66,55 @@ class e104_bt08(threading.Thread):
                         continue
                 else:
                     raise
+        while not self.rebootstart:
+            time.sleep(0.1)
 
     def run(self):
         while self.startflag:
             count = self.ser.inWaiting()
             if count != 0:
                 data = self.ser.read(count)
-                self.q.put(data)
                 print(self.isatreturn, data)
+                if AT_STATE_CONNECT in data:
+                    self.isatmode = False
+                    self.state = AT_STATE_CONNECT
+                    if self.statecallback:
+                        self.statecallback(self, AT_STATE_CONNECT)
+                    continue
+                elif AT_STATE_DISCONNECT in data or b'START\r\n' in data:
+                    self.isatmode = True
+                    self.rebootstart = True
+                    self.state = AT_STATE_DISCONNECT
+                    if self.statecallback:
+                        self.statecallback(self, AT_STATE_DISCONNECT)
+                    continue
+                elif AT_STATE_WAKEUP in data:
+                    self.isatmode = True
+                    self.state = AT_STATE_WAKEUP
+                    if self.statecallback:
+                        self.statecallback(self, AT_STATE_WAKEUP)
+                    continue
+                elif AT_STATE_SLEEP in data:
+                    self.isatmode = False
+                    self.state = AT_STATE_SLEEP
+                    if self.statecallback:
+                        self.statecallback(self, AT_STATE_SLEEP)
+                    continue
                 if self.isatreturn:
+                    self.q.put(data)
                     self.isatreturn = False
                 else:
-                    othdata = self.q.get()
-                    if othdata == AT_STATE_CONNECT:
-                        self.state = AT_STATE_CONNECT
-                        if self.statecallback:
-                            self.statecallback(self, AT_STATE_CONNECT)
-                    elif othdata == AT_STATE_DISCONNECT or othdata == b'START\r\n':
-                        self.state = AT_STATE_DISCONNECT
-                        if self.statecallback:
-                            self.statecallback(self, AT_STATE_DISCONNECT)
-                    elif othdata == AT_STATE_WAKEUP:
-                        self.state = AT_STATE_WAKEUP
-                        if self.statecallback:
-                            self.statecallback(self, AT_STATE_WAKEUP)
-                    elif othdata == AT_STATE_SLEEP:
-                        self.state = AT_STATE_SLEEP
-                        if self.statecallback:
-                            self.statecallback(self, AT_STATE_SLEEP)
-                    elif self.state != AT_STATE_DISCONNECT and self.state != AT_STATE_SLEEP:
+                    if self.state != AT_STATE_DISCONNECT and self.state != AT_STATE_SLEEP:
                         if self.datacallback:
-                            self.datacallback(self, othdata)
+                            self.datacallback(self, data)
             time.sleep(0.05)
 
     def get_state(self):
         return self.state
 
     def __send_atdata(self, data):
+        if not self.isatmode:
+            return b''
         self.ser.flushInput()
         timecont = 0
         while self.isatreturn:
@@ -140,14 +156,24 @@ class e104_bt08(threading.Thread):
     def set_state_callback(self, function):
         self.statecallback = function
 
-    def test(self):
+    def at_test(self):
         return b'+OK\r\n' in self.__send_atdata(b'AT')
 
     def enter_at(self):
-        return b'+OK\r\n' in self.__send_atdata(b'+++')
+        if b'+enter_at_mode\r\n' in self.__send_atdata(b'+++'):
+            self.isatmode = True
+            return True
+        else:
+            self.isatmode = False
+            return  False
 
     def exit_at(self):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+EXIT')
+        if b'+OK\r\n' in self.__send_atdata(b'AT+EXIT'):
+            self.isatmode = False
+            return True
+        else:
+            self.isatmode = True
+            return False
 
     def reset(self):
         return b'+OK\r\n' in self.__send_atdata(b'AT+RESET')
@@ -163,7 +189,7 @@ class e104_bt08(threading.Thread):
         for key, val in AT_BAUD.items():
             if val == baudrate:
                 self.ser.baudrate = baudrate
-                return b'+OK\r\n' in self.__send_atdata(b'AT+BAUD=' + key.encode())
+                return b'+OK\r\n' in self.__send_atdata(b'AT+BAUD=' + key)
         return False
 
     def get_parity(self):
@@ -176,19 +202,19 @@ class e104_bt08(threading.Thread):
             self.ser.parity = serial.PARITY_ODD
         elif parity == AT_PARITY_EVEN:
             self.ser.parity = serial.PARITY_EVEN
-        return b'+OK\r\n' in self.__send_atdata(b'AT+PARI=' + parity.encode())
+        return b'+OK\r\n' in self.__send_atdata(b'AT+PARI=' + parity)
 
     def get_role(self):
         return re.search(b'ROLE:(\d)', self.__send_atdata(b'AT+ROLE=?')).group(1)
 
     def set_role(self, role):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+ROLE=' + role.encode())
+        return b'+OK\r\n' in self.__send_atdata(b'AT+ROLE=' + role)
 
     def get_adv(self):
         return re.search(b'ADV:(\d)', self.__send_atdata(b'AT+ADV=?')).group(1)
 
     def set_adv(self, adv):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+ADV=' + adv.encode())
+        return b'+OK\r\n' in self.__send_atdata(b'AT+ADV=' + adv)
 
     def get_advdata(self):
         return re.search(b'ADVDAT:(.*?)\r\n', self.__send_atdata(b'AT+ADVDAT=?')).group(1)
