@@ -9,11 +9,17 @@ AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
 AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19200, b'6': 28800,
            b'7': 38400, b'8': 57600, b'9': 76800, b'10': 115200, b'11': 230400, b'12': 500000, b'13': 1000000}
 AT_PARITY_NONE, AT_PARITY_ODD, AT_PARITY_EVEN = b'0', b'1', b'2'
+PARITY_MAPPING = {
+    AT_PARITY_ODD: serial.PARITY_ODD,
+    AT_PARITY_EVEN: serial.PARITY_EVEN,
+    AT_PARITY_NONE: serial.PARITY_NONE
+}
 AT_ROLE_HOST, AT_ROLE_SLAVE = b'0', b'1'
 AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = b'0', b'1', b'2'
 AT_PWR_8DBM, AT_PWR_0DBM, AT_PWR_NEG_5DBM, AT_PWR_NEG_20DBM = b'0', b'1', b'2', b'3'
 AT_BOND_ABLE, AT_BOND_DISABLE = b'0', b'1'
 AT_ATE_OFF, AT_ATE_OPEN = b'0', b'1'
+AT_ERR = {b'1': '长度不匹配', b'2': '超过量程', b'3': '未找到参数', b'4': '不支持该指令', b'5': '保存flash失败', b'6': '参数非法'}
 
 
 class e104_bt08(threading.Thread):
@@ -26,18 +32,17 @@ class e104_bt08(threading.Thread):
         self.datacallback = datacallback
         self.statecallback = statecallback
         self.isatreturn = False
-        self.atdata = None
         self.rebootstart = False
         self.isatmode = True
         self.state = AT_STATE_DISCONNECT
-        if parity == AT_PARITY_ODD:
-            self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=serial.PARITY_ODD)
-        elif parity == AT_PARITY_EVEN:
-            self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=serial.PARITY_EVEN)
-        else:
-            self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=serial.PARITY_NONE)
+        selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
+        self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=selected_parity)
         self.start()
-        self.__init()
+        try:
+            self.__init()
+        except Exception:
+            self.close()
+            raise
 
     def close(self):
         self.startflag = False
@@ -52,23 +57,26 @@ class e104_bt08(threading.Thread):
         self.ser.write(data)
 
     def __init(self):
+        start_time = time.time()
         while True:
             try:
                 self.__send_atdata(b'+++')
                 self.reset()
                 break
             except Exception as e:
-                if str(e) == "不支持该指令":
-                    if self.atdata == b'+++\r\n+ERROR 4\r\n':
-                        self.reset()
-                        break
-                    else:
-                        time.sleep(0.1)
-                        continue
+                if str(e) == AT_ERR[b'4']:
+                    self.reset()
+                    break
                 else:
-                    raise
+                    time.sleep(0.1)
+                    if time.time() - start_time >= self.timeout:
+                        raise TimeoutError("等待蓝牙初始化超时")
+                    continue
+        start_time = time.time()
         while not self.rebootstart:
             time.sleep(0.1)
+            if time.time() - start_time >= self.timeout:
+                raise TimeoutError("等待蓝牙重启超时")
 
     def run(self):
         while self.startflag:
@@ -76,31 +84,21 @@ class e104_bt08(threading.Thread):
             if count != 0:
                 data = self.ser.read(count)
                 print(self.isatreturn, data)
-                if AT_STATE_CONNECT in data:
-                    self.isatmode = False
-                    self.state = AT_STATE_CONNECT
-                    if self.statecallback:
-                        self.statecallback(self, AT_STATE_CONNECT)
-                    continue
-                elif AT_STATE_DISCONNECT in data or b'START\r\n' in data:
-                    self.isatmode = True
-                    self.rebootstart = True
-                    self.state = AT_STATE_DISCONNECT
-                    if self.statecallback:
-                        self.statecallback(self, AT_STATE_DISCONNECT)
-                    continue
-                elif AT_STATE_WAKEUP in data:
-                    self.isatmode = True
-                    self.state = AT_STATE_WAKEUP
-                    if self.statecallback:
-                        self.statecallback(self, AT_STATE_WAKEUP)
-                    continue
-                elif AT_STATE_SLEEP in data:
-                    self.isatmode = False
-                    self.state = AT_STATE_SLEEP
-                    if self.statecallback:
-                        self.statecallback(self, AT_STATE_SLEEP)
-                    continue
+                for state, is_at_mode in {
+                    AT_STATE_CONNECT: False,
+                    AT_STATE_DISCONNECT: True,
+                    b'START\r\n': True,
+                    AT_STATE_WAKEUP: True,
+                    AT_STATE_SLEEP: False
+                }.items():
+                    if state in data:
+                        self.isatmode = is_at_mode
+                        if state == b'START\r\n':
+                            self.rebootstart = True
+                            self.state = AT_STATE_DISCONNECT
+                        if self.statecallback:
+                            self.statecallback(self, state)
+                        continue
                 if self.isatreturn:
                     self.q.put(data)
                     self.isatreturn = False
@@ -117,39 +115,25 @@ class e104_bt08(threading.Thread):
         if not self.isatmode and data != b'+++':
             return b''
         self.ser.flushInput()
-        timecont = 0
+        start_time = time.time()
         while self.isatreturn:
-            time.sleep(0.01)
-            timecont += 1
-            if timecont >= self.timeout * 100:
-                raise Exception("等待上次AT指令回应超时")
+            time.sleep(0.03)
+            if time.time() - start_time >= self.timeout:
+                raise TimeoutError("等待上次AT指令回应超时")
         self.isatreturn = True
         self.ser.write(data)
-        timecont = 0
+        start_time = time.time()
         while True:
             if not self.q.empty():
-                self.atdata = self.q.get()
-                err = re.search(b'\+ERROR (\d)', self.atdata)
+                data = self.q.get()
+                err = re.search(b'\+ERROR (\d)', data)
                 if err is not None:
-                    if err.group(1) == b'1':
-                        raise Exception('长度不匹配')
-                    elif err.group(1) == b'2':
-                        raise Exception('超过量程')
-                    elif err.group(1) == b'3':
-                        raise Exception('未找到参数')
-                    elif err.group(1) == b'4':
-                        raise Exception('不支持该指令')
-                    elif err.group(1) == b'5':
-                        raise Exception('保存flash失败')
-                    elif err.group(1) == b'6':
-                        raise Exception("参数非法")
-                    else:
-                        raise Exception("未知错误")
-                return self.atdata
-            time.sleep(0.01)
-            timecont += 1
-            if timecont >= self.timeout * 100:
-                raise Exception("超时,请检测硬件连接")
+                    if err.group(1) in AT_ERR:
+                        raise Exception(AT_ERR[err.group(1)])
+                return data
+            time.sleep(0.03)
+            if time.time() - start_time >= self.timeout:
+                raise TimeoutError("等待AT指令回应超时")
 
     def set_data_callback(self, function):
         self.datacallback = function
