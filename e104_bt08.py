@@ -99,9 +99,8 @@ class e104_bt08(threading.Thread):
                     self.q.put(data)
                     self.isatreturn = False
                 else:
-                    if self.state != AT_STATE_DISCONNECT and self.state != AT_STATE_SLEEP:
-                        if self.datacallback:
-                            self.datacallback(self, data)
+                    if self.datacallback:
+                        self.datacallback(self, data)
             time.sleep(0.05)
 
     def get_state(self):
@@ -141,20 +140,12 @@ class e104_bt08(threading.Thread):
         return b'+OK\r\n' in self.__send_atdata(b'AT')
 
     def enter_at(self):
-        if b'+enter_at_mode\r\n' in self.__send_atdata(b'+++'):
-            self.isatmode = True
-            return True
-        else:
-            self.isatmode = False
-            return False
+        self.isatmode = b'+enter_at_mode\r\n' in self.__send_atdata(b'+++')
+        return self.isatmode
 
     def exit_at(self):
-        if b'+OK\r\n' in self.__send_atdata(b'AT+EXIT'):
-            self.isatmode = False
-            return True
-        else:
-            self.isatmode = True
-            return False
+        self.isatmode = b'+OK\r\n' not in self.__send_atdata(b'AT+EXIT')
+        return not self.isatmode
 
     def reset(self):
         return b'+OK\r\n' in self.__send_atdata(b'AT+RESET')
@@ -177,12 +168,7 @@ class e104_bt08(threading.Thread):
         return re.search(b'PARI:(\d)', self.__send_atdata(b'AT+PARI=?')).group(1)
 
     def set_parity(self, parity):
-        if parity == AT_PARITY_NONE:
-            self.ser.parity = serial.PARITY_NONE
-        elif parity == AT_PARITY_ODD:
-            self.ser.parity = serial.PARITY_ODD
-        elif parity == AT_PARITY_EVEN:
-            self.ser.parity = serial.PARITY_EVEN
+        self.ser.parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
         return b'+OK\r\n' in self.__send_atdata(b'AT+PARI=' + parity)
 
     def get_role(self):
@@ -275,10 +261,7 @@ class e104_bt08(threading.Thread):
         return b'+OK\r\n' in self.__send_atdata(b'AT+SLEEP=' + str(para).encode())
 
     def get_atestate(self):
-        if b'AT' in self.__send_atdata(b'AT'):
-            return AT_ATE_OPEN
-        else:
-            return AT_ATE_OFF
+        return AT_ATE_OPEN if b'AT' in self.__send_atdata(b'AT') else AT_ATE_OFF
 
     def set_atestate(self, para):
         return b'+OK\r\n' in self.__send_atdata(b'ATE' + para)
