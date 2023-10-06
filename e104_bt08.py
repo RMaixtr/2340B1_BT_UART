@@ -57,7 +57,6 @@ class e104_bt08(threading.Thread):
         self.ser.write(data)
 
     def __init(self):
-        start_time = time.time()
         while True:
             try:
                 self.__send_atdata(b'+++')
@@ -68,10 +67,7 @@ class e104_bt08(threading.Thread):
                     self.reset()
                     break
                 else:
-                    time.sleep(0.1)
-                    if time.time() - start_time >= self.timeout:
-                        raise TimeoutError("等待蓝牙初始化超时")
-                    continue
+                    raise
         start_time = time.time()
         while not self.rebootstart:
             time.sleep(0.1)
