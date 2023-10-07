@@ -28,11 +28,11 @@ class e104_bt08(threading.Thread):
         threading.Thread.__init__(self)
         self.q = queue.Queue()
         self.timeout = timeout
-        self.startflag = True
         self.datacallback = datacallback
         self.statecallback = statecallback
         self.isatreturn = False
-        self.rebootstart = False
+        self.loopflag = True
+        self.rebootflag = False
         self.isatmode = True
         self.state = AT_STATE_DISCONNECT
         selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
@@ -45,7 +45,7 @@ class e104_bt08(threading.Thread):
             raise
 
     def close(self):
-        self.startflag = False
+        self.loopflag = False
         self.join()
         self.ser.close()
 
@@ -69,15 +69,16 @@ class e104_bt08(threading.Thread):
                 else:
                     raise
         start_time = time.time()
-        while not self.rebootstart:
+        while not self.rebootflag:
             time.sleep(0.1)
             if time.time() - start_time >= self.timeout:
                 raise TimeoutError("等待蓝牙重启超时")
 
     def run(self):
-        while self.startflag:
+        while self.loopflag:
             count = self.ser.inWaiting()
             if count != 0:
+                isstatedata = False
                 data = self.ser.read(count)
                 print(self.isatreturn, data)
                 for state, is_at_mode in {
@@ -88,13 +89,16 @@ class e104_bt08(threading.Thread):
                     AT_STATE_SLEEP: False
                 }.items():
                     if state in data:
+                        isstatedata = True
                         self.isatmode = is_at_mode
                         if state == b'START\r\n':
-                            self.rebootstart = True
+                            self.rebootflag = True
                             self.state = AT_STATE_DISCONNECT
                         if self.statecallback:
                             self.statecallback(self, state)
-                        continue
+                        break
+                if isstatedata:
+                    continue
                 if self.isatreturn:
                     self.q.put(data)
                     self.isatreturn = False
@@ -250,6 +254,7 @@ class e104_bt08(threading.Thread):
 
     def set_auth(self, password):
         self.__send_atdata(b'AT+AUTH=' + password)
+        return True
 
     def get_upauth(self):
         return re.search(b'AUTH:(\w+)', self.__send_atdata(b'AT+UPAUTH=?')).group(1)
@@ -273,8 +278,7 @@ class e104_bt08(threading.Thread):
         return b'+OK\r\n' in self.__send_atdata(b'AT+PWR=' + pwr)
 
     def get_version(self):
-        lines = str(self.__send_atdata(b'AT+VER').decode('utf-8')).strip().split('\r\n')
-        return lines[-1]
+        return str(self.__send_atdata(b'AT+VER').decode('utf-8')).strip().split('\r\n')[-1]
 
     def get_bondenable(self):
         return re.search(b'BOND:(\d)', self.__send_atdata(b'AT+BOND=?')).group(1)
