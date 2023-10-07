@@ -44,6 +44,10 @@ class e104_bt08(threading.Thread):
             self.close()
             raise
 
+    def __del__(self):
+        self.close()
+        del self
+
     def close(self):
         self.loopflag = False
         self.join()
@@ -80,7 +84,7 @@ class e104_bt08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                print(self.isatreturn, data)
+                # print(self.isatreturn, data)
                 for state, is_at_mode in {
                     AT_STATE_CONNECT: False,
                     AT_STATE_DISCONNECT: True,
