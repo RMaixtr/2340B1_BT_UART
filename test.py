@@ -1,4 +1,4 @@
-import e104_bt08
+from bt import e104_bt08
 
 
 def bt08_data_callback(self, data):
@@ -10,9 +10,18 @@ def bt08_state_callback(self, data):
     print("statechange")
 
 
+def unit_test_loop_change_id():
+    pass
+
+
+def unit_test_loop_write_read():
+    ble = e104_bt08(datacallback=bt08_data_callback, statecallback=bt08_state_callback)
+    for index in range(10):
+        ble.set_name(str(index).encode())
+        ble.reset()
+        ble.close()
+
+
 if __name__ == '__main__':
-    blu = e104_bt08.e104_bt08(datacallback=bt08_data_callback, statecallback=bt08_state_callback)
-    while True:
-        user_input = input("回车退出")
-        break
-    blu.close()
+    unit_test_loop_write_read()
+    unit_test_loop_change_id()
