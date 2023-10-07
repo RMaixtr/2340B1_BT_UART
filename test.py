@@ -13,9 +13,6 @@ def bt08_state_callback(self, data):
 if __name__ == '__main__':
     blu = e104_bt08.e104_bt08(datacallback=bt08_data_callback, statecallback=bt08_state_callback)
     while True:
-        user_input = input("按下 Enter 键来结束程序,按其他键发送信息")
-        if user_input == "":
-            break
-        if blu.get_state() == e104_bt08.AT_STATE_CONNECT:
-            blu.write("test")
+        user_input = input("回车退出")
+        break
     blu.close()
