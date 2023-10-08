@@ -85,17 +85,19 @@ class e104_bt08(threading.Thread):
                 isstatedata = False
                 data = self.ser.read(count)
                 # print(self.isatreturn, data)
-                for state, is_at_mode in {
-                    AT_STATE_CONNECT: False,
-                    AT_STATE_DISCONNECT: True,
-                    b'START\r\n': True,
-                    AT_STATE_WAKEUP: True,
-                    AT_STATE_SLEEP: False
+                for state in {
+                    AT_STATE_CONNECT,
+                    AT_STATE_DISCONNECT,
+                    b'START\r\n',
+                    AT_STATE_WAKEUP,
+                    AT_STATE_SLEEP
                 }.items():
                     if state in data:
                         isstatedata = True
-                        self.isatmode = is_at_mode
                         if state == b'START\r\n':
+                            self.isatmode = False
+                        if state == b'START\r\n':
+                            self.isatmode = True
                             self.rebootflag = True
                             self.state = AT_STATE_DISCONNECT
                         if self.statecallback:
