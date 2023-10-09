@@ -22,9 +22,9 @@ AT_ATE_OFF, AT_ATE_OPEN = b'0', b'1'
 AT_ERR = {b'1': '长度不匹配', b'2': '超过量程', b'3': '未找到参数', b'4': '不支持该指令', b'5': '保存flash失败', b'6': '参数非法'}
 
 
-class e104_bt08(threading.Thread):
+class E104_BT08(threading.Thread):
 
-    def __init__(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1, datacallback=None, statecallback=None):
+    def __init__(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1, datacallback=[], statecallback=[]):
         threading.Thread.__init__(self)
         self.q = queue.Queue()
         self.timeout = timeout
@@ -43,10 +43,6 @@ class e104_bt08(threading.Thread):
         except Exception:
             self.close()
             raise
-
-    def __del__(self):
-        self.close()
-        del self
 
     def close(self):
         self.loopflag = False
@@ -84,7 +80,7 @@ class e104_bt08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                # print(self.isatreturn, data)
+                print(self.isatreturn, data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -94,14 +90,15 @@ class e104_bt08(threading.Thread):
                 }.items():
                     if state in data:
                         isstatedata = True
-                        if state == b'START\r\n':
+                        if state == AT_STATE_CONNECT:
                             self.isatmode = False
-                        if state == b'START\r\n':
+                        elif state == b'START\r\n':
                             self.isatmode = True
                             self.rebootflag = True
                             self.state = AT_STATE_DISCONNECT
                         if self.statecallback:
-                            self.statecallback(self, state)
+                            for call in self.statecallback:
+                                call(self, state)
                         break
                 if isstatedata:
                     continue
@@ -110,7 +107,8 @@ class e104_bt08(threading.Thread):
                     self.isatreturn = False
                 else:
                     if self.datacallback:
-                        self.datacallback(self, data)
+                        for call in self.datacallback:
+                            call(self, data)
             time.sleep(0.05)
 
     def get_state(self):
@@ -140,11 +138,21 @@ class e104_bt08(threading.Thread):
             if time.time() - start_time >= self.timeout:
                 raise TimeoutError("等待AT指令回应超时")
 
-    def set_data_callback(self, function):
-        self.datacallback = function
+    def add_data_callback(self, function):
+        self.datacallback.append(function)
 
-    def set_state_callback(self, function):
-        self.statecallback = function
+    def add_state_callback(self, function):
+        self.statecallback.append(function)
+
+    def del_data_callback(self, function=None):
+        self.datacallback.remove(function) if function else self.datacallback.pop()
+
+    def del_state_callback(self, function=None):
+        self.statecallback.remove(function) if function else self.statecallback.pop()
+
+    def set_uart(self, baudrate=115200, parity=AT_PARITY_NONE):
+        self.ser.baudrate = baudrate
+        self.ser.parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
 
     def at_test(self):
         return b'+OK\r\n' in self.__send_atdata(b'AT')
@@ -291,3 +299,6 @@ class e104_bt08(threading.Thread):
 
     def set_bondenable(self, para):
         return b'+OK\r\n' in self.__send_atdata(b'AT+BOND=' + para)
+
+
+e104_bt08 = E104_BT08()
