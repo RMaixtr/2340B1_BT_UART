@@ -80,16 +80,17 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                print(self.isatreturn, data)
+                # print(self.isatreturn, data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
                     b'START\r\n',
                     AT_STATE_WAKEUP,
                     AT_STATE_SLEEP
-                }.items():
+                }:
                     if state in data:
                         isstatedata = True
+                        self.state = state
                         if state == AT_STATE_CONNECT:
                             self.isatmode = False
                         elif state == b'START\r\n':
@@ -102,7 +103,7 @@ class E104_BT08(threading.Thread):
                         break
                 if isstatedata:
                     continue
-                if self.isatreturn:
+                elif self.isatreturn:
                     self.q.put(data)
                     self.isatreturn = False
                 else:
