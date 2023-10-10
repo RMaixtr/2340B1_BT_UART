@@ -3,6 +3,7 @@ import serial
 import re
 import time
 import queue
+from io import BytesIO
 
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
     b'\r\n STA:connect\r\n', b'\r\n disconnect\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
@@ -27,6 +28,7 @@ class E104_BT08(threading.Thread):
     def __init__(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1, datacallback=[], statecallback=[]):
         threading.Thread.__init__(self)
         self.q = queue.Queue()
+        self.f = BytesIO()
         self.timeout = timeout
         self.datacallback = datacallback
         self.statecallback = statecallback
@@ -107,17 +109,28 @@ class E104_BT08(threading.Thread):
                     self.q.put(data)
                     self.isatreturn = False
                 else:
+                    self.f.write(data)
                     if self.datacallback:
                         for call in self.datacallback:
                             call(self, data)
             time.sleep(0.05)
 
+    def is_connected(self):
+        return self.get_state() == AT_STATE_CONNECT
+
+    def read(self):
+        self.f.seek(0)
+        data = self.f.read()
+        self.f.truncate(0)
+        self.f.seek(0)
+        return data
+
     def get_state(self):
         return self.state
 
     def __send_atdata(self, data):
-        if not self.isatmode and data != b'+++':
-            return b''
+        # if not self.isatmode and data != b'+++':
+        #     return b''
         self.ser.flushInput()
         start_time = time.time()
         while self.isatreturn:
