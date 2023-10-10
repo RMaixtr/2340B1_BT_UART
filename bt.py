@@ -35,7 +35,6 @@ class E104_BT08(threading.Thread):
         self.isatreturn = False
         self.loopflag = True
         self.rebootflag = False
-        self.isatmode = True
         self.state = AT_STATE_DISCONNECT
         selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
         self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=selected_parity)
@@ -51,9 +50,6 @@ class E104_BT08(threading.Thread):
         self.join()
         self.ser.close()
 
-    def is_at_mode(self):
-        return self.isatmode
-
     def write(self, data):
         self.ser.flushInput()
         self.ser.write(data)
@@ -61,12 +57,12 @@ class E104_BT08(threading.Thread):
     def __init(self):
         while True:
             try:
-                self.__send_atdata(b'+++')
-                self.reset()
+                self.__send_data(b'+++')
+                self.__send_atdata(b'AT+RESET')
                 break
             except Exception as e:
                 if str(e) == AT_ERR[b'4']:
-                    self.reset()
+                    self.__send_atdata(b'AT+RESET')
                     break
                 else:
                     raise
@@ -93,10 +89,7 @@ class E104_BT08(threading.Thread):
                     if state in data:
                         isstatedata = True
                         self.state = state
-                        if state == AT_STATE_CONNECT:
-                            self.isatmode = False
-                        elif state == b'START\r\n':
-                            self.isatmode = True
+                        if state == b'START\r\n':
                             self.rebootflag = True
                             self.state = AT_STATE_DISCONNECT
                         if self.statecallback:
@@ -128,9 +121,7 @@ class E104_BT08(threading.Thread):
     def get_state(self):
         return self.state
 
-    def __send_atdata(self, data):
-        # if not self.isatmode and data != b'+++':
-        #     return b''
+    def __send_data(self, data):
         self.ser.flushInput()
         start_time = time.time()
         while self.isatreturn:
@@ -152,6 +143,24 @@ class E104_BT08(threading.Thread):
             if time.time() - start_time >= self.timeout:
                 raise TimeoutError("等待AT指令回应超时")
 
+    def __send_atdata(self, data):
+        try:
+            data = self.__send_data(data)
+        except Exception as e:
+            if str(e) == "等待AT指令回应超时":
+                try:
+                    self.enter_at()
+                except Exception as e:
+                    if str(e) == AT_ERR[b'4']:
+                        data = self.__send_data(data)
+                    else:
+                        raise
+            elif str(e) == AT_ERR[b'4']:
+                data = self.__send_data(data)
+            else:
+                raise
+        return data if data else b''
+
     def add_data_callback(self, function):
         self.datacallback.append(function)
 
@@ -172,12 +181,10 @@ class E104_BT08(threading.Thread):
         return b'+OK\r\n' in self.__send_atdata(b'AT')
 
     def enter_at(self):
-        self.isatmode = b'+enter_at_mode\r\n' in self.__send_atdata(b'+++')
-        return self.isatmode
+        return b'+enter_at_mode\r\n' in self.__send_atdata(b'+++')
 
     def exit_at(self):
-        self.isatmode = b'+OK\r\n' not in self.__send_atdata(b'AT+EXIT')
-        return not self.isatmode
+        return b'+OK\r\n' in self.__send_atdata(b'AT+EXIT')
 
     def reset(self):
         return b'+OK\r\n' in self.__send_atdata(b'AT+RESET')
@@ -220,10 +227,14 @@ class E104_BT08(threading.Thread):
 
     def set_advdata(self, data, vendor_data=b'\x01\x02'):
         length = len(b'\xff' + vendor_data + data)
+        if length >= 29 or len(vendor_data) > 2:
+            return False
         set_data = b'AT+ADVDAT=' + bytes.fromhex(format(length, '02x')) + b'\xff' + vendor_data + data
         return b'+OK\r\n' in self.__send_atdata(set_data)
 
     def set_ibeacon_advdata(self, uuid, major, minor, power):
+        if len(uuid) != 16 or len(major) != 2 or len(minor) != 2 or len(power) != 1:
+            return False
         set_data = b'AT+ADVDAT=\x1a\xff\x4c\x00\x02\x15' + uuid + major + minor + power
         return b'+OK\r\n' in self.__send_atdata(set_data)
 
@@ -237,12 +248,18 @@ class E104_BT08(threading.Thread):
         return re.search(b'NAME:(\S+)', self.__send_atdata(b'AT+NAME=?')).group(1)
 
     def set_name(self, name):
+        if len(name) > 25:
+            return False
         return b'+OK\r\n' in self.__send_atdata(b'AT+NAME=' + name)
 
     def get_conparams(self):
         return [int(byte_str) for byte_str in re.findall(b'\d+', self.__send_atdata(b'AT+CONPARAMS=?'))]
 
     def set_conparams(self, connection_delay=40, slave_delay=0, parameter_exception=20):
+        if connection_delay < 6 or connection_delay > 3200 or slave_delay > 499 \
+                or parameter_exception < 10 or parameter_exception > 3200 \
+                or parameter_exception * 4 <= (1 + slave_delay) * connection_delay:
+            return False
         set_data = b'AT+CONPARAMS=' + str(connection_delay).encode() + b',' \
                    + str(slave_delay).encode() + b',' + str(parameter_exception).encode()
         return b'+OK\r\n' in self.__send_atdata(set_data)
@@ -254,33 +271,45 @@ class E104_BT08(threading.Thread):
         return re.search(b'MAC:(\w+)', self.__send_atdata(b'AT+MAC=?')).group(1)
 
     def set_mac(self, mac):
+        if len(mac) != 12:
+            return False
         return b'+OK\r\n' in self.__send_atdata(b'AT+MAC=' + mac)
 
     def get_bondmac(self):
         return re.findall(b'MAC:(\w+)', self.__send_atdata(b'AT+BONDMAC=?'))
 
     def set_bondmac(self, mac):
+        if len(mac) != 12:
+            return False
         return b'+OK\r\n' in self.__send_atdata(b'AT+BONDMAC=' + mac)
 
     def get_mtu(self):
         return int(re.search(b'MTU:(\d+)', self.__send_atdata(b'AT+MTU=?')).group(1))
 
     def set_mtu(self, mtu):
+        if mtu < 23 or mtu > 247:
+            return False
         return b'+OK\r\n' in self.__send_atdata(b'AT+MTU=' + str(mtu).encode())
 
     def get_scanwindow(self):
         return int(re.search(b'SCANWND:(\d+)', self.__send_atdata(b'AT+SCANWND=?')).group(1))
 
-    def set_scanwindow(self, scanwnd):
+    def set_scanwindow(self, scanwnd=1000):
+        if scanwnd < 40 or scanwnd > 9999:
+            return False
         return b'+OK\r\n' in self.__send_atdata(b'AT+SCANWND=' + str(scanwnd).encode())
 
     def get_uuidserver(self):
         return int(re.search(b'UUIDSVR:(\d+)', self.__send_atdata(b'AT+UUIDSVR=?')).group(1))
 
     def set_uuidserver(self, uuidserver):
+        if uuidserver > 65535:
+            return False
         return b'+OK\r\n' in self.__send_atdata(b'AT+UUIDSVR=' + str(uuidserver).encode())
 
     def set_auth(self, password):
+        if len(password) != 6:
+            return False
         self.__send_atdata(b'AT+AUTH=' + password)
         return True
 
@@ -288,6 +317,8 @@ class E104_BT08(threading.Thread):
         return re.search(b'AUTH:(\w+)', self.__send_atdata(b'AT+UPAUTH=?')).group(1)
 
     def set_upauth(self, password):
+        if len(password) != 6:
+            return False
         return b'+OK\r\n' in self.__send_atdata(b'AT+UPAUTH=' + password)
 
     def sleep(self, para):
