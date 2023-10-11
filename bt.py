@@ -3,6 +3,7 @@ import serial
 import re
 import time
 import queue
+import json
 from io import BytesIO
 
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
@@ -160,6 +161,36 @@ class E104_BT08(threading.Thread):
             else:
                 raise
         return data if data else b''
+
+    def backup_config(self):
+        data = {"BAUD": self.get_baudrate(), "PARI": self.get_parity(), "ROLE": self.get_role(), "ADV": self.get_adv(),
+                "ADVDAT": self.get_advdata(), "ADVINTV": self.get_advintv(), "NAME": self.get_name(),
+                "CONPARAMS": self.get_conparams(), "MAC": self.get_mac(), "BONDMAC": self.get_bondmac(),
+                "MTU": self.get_mtu(), "SCANWND": self.get_scanwindow(), "UUIDSVR": self.get_uuidserver(),
+                "UPAUTH": self.get_upauth(), "ATE": self.get_atestate(), "PWR": self.get_power(),
+                "BOND": self.get_bondenable()}
+        return json.dumps(data)
+
+    def restore_config(self,backup):
+        data = json.loads(backup)
+        self.set_baudrate(data["BAUD"])
+        self.set_parity(data["PARI"])
+        self.set_role(data["ROLE"])
+        self.set_adv(data["ADV"])
+        self.set_advdata(data["ADVDAT"])
+        self.set_advintv(data["ADVINTV"])
+        self.set_name(data["NAME"])
+        self.set_conparams(data["CONPARAMS"])
+        self.set_mac(data["MAC"])
+        self.set_bondmac(data["BONDMAC"][0])
+        self.set_bondmac(data["BONDMAC"][1])
+        self.set_mtu(data["MTU"])
+        self.set_scanwindow(data["SCANWND"])
+        self.set_uuidserver(data["UUIDSVR"])
+        self.set_upauth(data["UPAUTH"])
+        self.set_atestate(data["ATE"])
+        self.set_power(data["PWR"])
+        self.set_bondenable(data["BOND"])
 
     def add_data_callback(self, function):
         self.datacallback.append(function)
