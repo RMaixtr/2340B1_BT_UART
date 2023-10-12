@@ -151,6 +151,8 @@ class E104_BT08(threading.Thread):
             if str(e) == "等待AT指令回应超时":
                 try:
                     self.enter_at()
+                    self.__send_data(data)
+                    self.exit_at()
                 except Exception as e:
                     if str(e) == AT_ERR[b'4']:
                         data = self.__send_data(data)
@@ -182,8 +184,7 @@ class E104_BT08(threading.Thread):
         self.set_name(data["NAME"])
         self.set_conparams(data["CONPARAMS"])
         self.set_mac(data["MAC"])
-        self.set_bondmac(data["BONDMAC"][0])
-        self.set_bondmac(data["BONDMAC"][1])
+        self.set_bondmac(data["BONDMAC"])
         self.set_mtu(data["MTU"])
         self.set_scanwindow(data["SCANWND"])
         self.set_uuidserver(data["UUIDSVR"])
@@ -310,9 +311,17 @@ class E104_BT08(threading.Thread):
         return re.findall(b'MAC:(\w+)', self.__send_atdata(b'AT+BONDMAC=?'))
 
     def set_bondmac(self, mac):
-        if len(mac) != 12:
+        if len(mac) == 12:
+            return b'+OK\r\n' in self.__send_atdata(b'AT+BONDMAC=' + mac)
+        elif len(mac) == 2:
+            if len(mac[0] == 12):
+                self.__send_atdata(b'AT+BONDMAC=' + mac[0])
+                self.__send_atdata(b'AT+BONDMAC=' + mac[1])
+                return True
+            else:
+                return False
+        else:
             return False
-        return b'+OK\r\n' in self.__send_atdata(b'AT+BONDMAC=' + mac)
 
     def get_mtu(self):
         return int(re.search(b'MTU:(\d+)', self.__send_atdata(b'AT+MTU=?')).group(1))
