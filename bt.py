@@ -5,6 +5,10 @@ import time
 import queue
 import json
 from io import BytesIO
+import os
+import io
+import sys
+import requests
 
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
     b'\r\n STA:connect\r\n', b'\r\n disconnect\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
@@ -173,7 +177,7 @@ class E104_BT08(threading.Thread):
                 "BOND": self.get_bondenable()}
         return json.dumps(data)
 
-    def restore_config(self,backup):
+    def restore_config(self, backup):
         data = json.loads(backup)
         self.set_baudrate(data["BAUD"])
         self.set_parity(data["PARI"])
@@ -387,3 +391,74 @@ class E104_BT08(threading.Thread):
 
 
 e104_bt08 = E104_BT08()
+
+
+class OutputCatcher(io.StringIO):
+    def __init__(self):
+        super(OutputCatcher, self).__init__()
+        self.captured_output = []
+
+    def write(self, text):
+        super(OutputCatcher, self).write(text)
+        self.captured_output.append(text)
+
+    def flush(self):
+        pass
+
+
+def download_file(url, file_path):
+    if os.path.exists(file_path):
+        # 如果文件已经存在，获取已下载部分的大小
+        file_size = os.path.getsize(file_path)
+        headers = {'Range': f'bytes={file_size}-'}
+    else:
+        headers = None
+
+    response = requests.get(url, headers=headers, stream=True)
+
+    if response.status_code == 200:
+        # 文件不存在或服务器不支持断点续传，创建新文件
+        with open(file_path, 'wb') as file:
+            for chunk in response.iter_content(1024):
+                file.write(chunk)
+    elif response.status_code == 206:
+        # 服务器支持断点续传，追加数据到现有文件
+        with open(file_path, 'ab') as file:
+            for chunk in response.iter_content(1024):
+                file.write(chunk)
+    else:
+        print(f"Failed to download the file. Status code: {response.status_code}")
+
+
+def run_code(code):
+    output_catcher = OutputCatcher()
+    sys.stdout = output_catcher
+
+    try:
+        exec(code)
+
+    except Exception as e:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback_details = {
+            'filename': exc_traceback.tb_frame.f_code.co_filename,
+            'lineno': exc_traceback.tb_lineno,
+            'name': exc_traceback.tb_frame.f_code.co_name,
+            'type': exc_type.__name__,
+            'message': str(e)
+        }
+        print("Exception in file '{filename}' at line {lineno}: {type} - {message}".format(**traceback_details))
+
+    # 恢复标准输出并获取捕获的输出
+    sys.stdout = sys.__stdout__
+    captured_output = output_catcher.captured_output
+
+    # 打印捕获的输出
+    for line in captured_output:
+        print(line.strip())
+
+def run_file(file_path):
+    file_path = file_path
+    with open(file_path, 'r') as file:
+        file_content = file.read()
+    file.close()
+    run_code(file_content)
