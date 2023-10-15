@@ -5,10 +5,9 @@ import time
 import queue
 import json
 from io import BytesIO
-import os
-import io
 import sys
-import requests
+import os
+from zlib import crc32
 
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
     b'\r\n STA:connect\r\n', b'\r\n disconnect\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
@@ -40,6 +39,10 @@ class E104_BT08(threading.Thread):
         self.isatreturn = False
         self.loopflag = True
         self.rebootflag = False
+        self.senddata = b''
+        self.sendcrc = b''
+        self.sendflag = False
+        self.sendlen = 0
         self.state = AT_STATE_DISCONNECT
         selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
         self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=selected_parity)
@@ -106,6 +109,23 @@ class E104_BT08(threading.Thread):
                 elif self.isatreturn:
                     self.q.put(data)
                     self.isatreturn = False
+                elif self.sendflag and data[0:2] == b'\xff\xff' and len(data) == 20 and all(chr(byte).isalnum()
+                        and chr(byte) in '0123456789ABCDEF' for byte in data[2:]):
+                    split = data[2:12]
+                    # 如果分卷大小大于或对应分卷crc不同重来
+                    if split != b'0000000000':
+                        crc = data[-8:]
+                        if split > self.sendlen or crc32(self.senddata[split - 1], 0) != crc:
+                            self.write(b'\xff\xff000000000000000000')
+                            threading.Thread(target=self.send_data, args=(0,))
+                        elif split == self.sendlen and self.sendcrc != crc:
+                            self.write(b'\xff\xff000000000000000000')
+                            threading.Thread(target=self.send_data, args=(0,))
+                        elif split == self.sendlen and self.sendcrc == crc:
+                            self.write(b'\xff\xffsendend')# 传输结束
+                        else:
+                            self.write(b'\xff\xff'+split+crc)
+                            threading.Thread(target=self.send_data, args=(int(split, 16),))
                 else:
                     self.f.write(data)
                     if self.datacallback:
@@ -389,50 +409,52 @@ class E104_BT08(threading.Thread):
     def set_bondenable(self, para):
         return b'+OK\r\n' in self.__send_atdata(b'AT+BOND=' + para)
 
+    def sent_file(self, file_path):
+        if not os.path.exists(file_path):
+            return False
+        self.senddata = []
+        self.sendcrc = crc32_file(file_path)
+        with open(file_path, 'rb') as file:
+            while True:
+                data = file.read(18)
+                if not data:
+                    break
+                self.senddata.append(data)
+        self.sendlen = len(self.senddata)
+        split = hex(self.sendlen)[2:].zfill(10).encode()
+        send_data = b'\xff\xff' + split + self.sendcrc
+        self.write(send_data)
+        self.sendflag = True
+        return True
+
+    def send_data(self, split):
+        while self.sendlen != split:
+            split += 1
+            self.write(b'\xff\xff'+self.senddata[split])
+            time.sleep(0.07)
+        self.sendflag = False
 
 e104_bt08 = E104_BT08()
 
 
-class OutputCatcher(io.StringIO):
-    def __init__(self):
-        super(OutputCatcher, self).__init__()
-        self.captured_output = []
-
-    def write(self, text):
-        super(OutputCatcher, self).write(text)
-        self.captured_output.append(text)
-
-    def flush(self):
-        pass
+def crc32_file(file_path):
+    prev_crc = 0
+    with open(file_path, 'rb') as file:
+        while True:
+            data = file.read(8192)  # 一次读取一部分数据
+            if not data:
+                break
+            prev_crc = crc32(data, prev_crc)
+    return hex(prev_crc & 0xFFFFFFFF)[2:].zfill(8).encode()
 
 
-def download_file(url, file_path):
-    if os.path.exists(file_path):
-        # 如果文件已经存在，获取已下载部分的大小
-        file_size = os.path.getsize(file_path)
-        headers = {'Range': f'bytes={file_size}-'}
-    else:
-        headers = None
-
-    response = requests.get(url, headers=headers, stream=True)
-
-    if response.status_code == 200:
-        # 文件不存在或服务器不支持断点续传，创建新文件
-        with open(file_path, 'wb') as file:
-            for chunk in response.iter_content(1024):
-                file.write(chunk)
-    elif response.status_code == 206:
-        # 服务器支持断点续传，追加数据到现有文件
-        with open(file_path, 'ab') as file:
-            for chunk in response.iter_content(1024):
-                file.write(chunk)
-    else:
-        print(f"Failed to download the file. Status code: {response.status_code}")
+def w_file(file_path, data):
+    with open(file_path, "a") as file:
+        file.write(data)
 
 
 def run_code(code):
-    output_catcher = OutputCatcher()
-    sys.stdout = output_catcher
+    sys.stdout = e104_bt08.ser
 
     try:
         exec(code)
@@ -450,11 +472,7 @@ def run_code(code):
 
     # 恢复标准输出并获取捕获的输出
     sys.stdout = sys.__stdout__
-    captured_output = output_catcher.captured_output
 
-    # 打印捕获的输出
-    for line in captured_output:
-        print(line.strip())
 
 def run_file(file_path):
     file_path = file_path
