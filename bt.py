@@ -162,6 +162,7 @@ class E104_BT08(threading.Thread):
                 if err is not None:
                     if err.group(1) in AT_ERR:
                         raise Exception(AT_ERR[err.group(1)])
+                print(data)
                 return data
             time.sleep(0.03)
             if time.time() - start_time >= self.timeout:
@@ -173,8 +174,9 @@ class E104_BT08(threading.Thread):
         except Exception as e:
             if str(e) == "等待AT指令回应超时":
                 try:
+                    self.isatreturn = False
                     self.enter_at()
-                    self.__send_data(data)
+                    data = self.__send_data(data)
                     self.exit_at()
                 except Exception as e:
                     if str(e) == AT_ERR[b'4']:
