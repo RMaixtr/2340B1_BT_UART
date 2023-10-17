@@ -108,22 +108,23 @@ class E104_BT08(threading.Thread):
                 elif self.isatreturn:
                     self.q.put(data)
                     self.isatreturn = False
-                elif self.sendflag and data[0:2] == b'\xff\xff' and len(data) == 20 \
-                        and all(chr(byte).isalnum() and chr(byte) in '0123456789ABCDEF' for byte in data[12:]):
-                    split = data[12:-2]
+                elif self.sendflag and data[0:2] == b'\xff\xff' and len(data) == 10 \
+                        and all(chr(byte).isalnum() and chr(byte) in '0123456789ABCDEF' for byte in data[2:]):
+                    split = int(data[2:8], 16)
                     # 如果分卷大小大于或对应分卷crc不同重来
                     crc = data[-2:]
                     if split != b'000000':
-                        if int(split, 16) > self.sendlen or crc8(self.senddata[split - 1]) != crc:
+                        if split < self.sendlen and hex(crc8(self.senddata[split - 1]))[2:].zfill(2).encode() == crc:
+                            self.write(b'\xff\xff' + data[2:8] + crc)
+                            threading.Thread(target=self.send_data, args=(split,)).start()
+                        elif split == self.sendlen and self.sendcrc == crc:
+                            self.write(b'\xff\xffsendend')
+                        else:
                             self.write(b'\xff\xff000000')
-                            threading.Thread(target=self.send_data, args=(0,))
-                        elif int(split, 16) == self.sendlen and self.sendcrc != crc:
-                            self.write(b'\xff\xff000000')
-                            threading.Thread(target=self.send_data, args=(0,))
-                        elif int(split, 16) == self.sendlen and self.sendcrc == crc:
-                            self.write(b'\xff\xffsendend')  # 传输结束
+                            threading.Thread(target=self.send_data, args=(0,)).start()
+
                     else:
-                        self.write(b'\xff\xff' + split + crc)
+                        self.write(b'\xff\xff000000')
                         threading.Thread(target=self.send_data, args=(0,)).start()
                 else:
                     self.f.write(data)
@@ -421,6 +422,7 @@ class E104_BT08(threading.Thread):
                 data = file.read(18)
                 if not data:
                     break
+                print(data)
                 self.senddata.append(data)
         self.sendlen = len(self.senddata)
         split = hex(self.sendlen)[2:].zfill(6).encode()
@@ -431,11 +433,11 @@ class E104_BT08(threading.Thread):
 
     def send_data(self, split):
         while self.sendlen != split:
-
             self.write(b'\xff\xff' + self.senddata[split])
             time.sleep(0.07)
             split += 1
         self.sendflag = False
+        self.write(b'\xff\xffsendend')
 
 
 e104_bt08 = E104_BT08()
