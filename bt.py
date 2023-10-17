@@ -112,19 +112,19 @@ class E104_BT08(threading.Thread):
                         and all(chr(byte).isalnum() and chr(byte) in '0123456789ABCDEF' for byte in data[12:]):
                     split = data[12:-2]
                     # 如果分卷大小大于或对应分卷crc不同重来
+                    crc = data[-2:]
                     if split != b'000000':
-                        crc = data[-2:]
-                        if split > self.sendlen or crc8(self.senddata[split - 1]) != crc:
+                        if int(split, 16) > self.sendlen or crc8(self.senddata[split - 1]) != crc:
                             self.write(b'\xff\xff000000')
                             threading.Thread(target=self.send_data, args=(0,))
-                        elif split == self.sendlen and self.sendcrc != crc:
+                        elif int(split, 16) == self.sendlen and self.sendcrc != crc:
                             self.write(b'\xff\xff000000')
                             threading.Thread(target=self.send_data, args=(0,))
-                        elif split == self.sendlen and self.sendcrc == crc:
+                        elif int(split, 16) == self.sendlen and self.sendcrc == crc:
                             self.write(b'\xff\xffsendend')  # 传输结束
-                        else:
-                            self.write(b'\xff\xff' + split + crc)
-                            threading.Thread(target=self.send_data, args=(int(split, 16),))
+                    else:
+                        self.write(b'\xff\xff' + split + crc)
+                        threading.Thread(target=self.send_data, args=(0,)).start()
                 else:
                     self.f.write(data)
                     if self.datacallback:
@@ -409,7 +409,7 @@ class E104_BT08(threading.Thread):
     def set_bondenable(self, para):
         return b'+OK\r\n' in self.__send_atdata(b'AT+BOND=' + para)
 
-    def sent_file(self, file_path, save_file_name):
+    def send_file(self, file_path, save_file_name):
         if not os.path.exists(file_path):
             return False
         if len(save_file_name) > 10:
@@ -424,16 +424,17 @@ class E104_BT08(threading.Thread):
                 self.senddata.append(data)
         self.sendlen = len(self.senddata)
         split = hex(self.sendlen)[2:].zfill(6).encode()
-        send_data = b'\xff\xff' + save_file_name + split + self.sendcrc
+        send_data = b'\xff\xff' + b'\xff' * (10 - len(save_file_name)) + save_file_name + split + self.sendcrc
         self.write(send_data)
         self.sendflag = True
         return True
 
     def send_data(self, split):
         while self.sendlen != split:
-            split += 1
+
             self.write(b'\xff\xff' + self.senddata[split])
             time.sleep(0.07)
+            split += 1
         self.sendflag = False
 
 
@@ -470,7 +471,6 @@ def crc8_file(file_path):
             data = file.read(8192)  # 一次读取一部分数据
             if not data:
                 break
-            print(data)
             prev_crc = crc8(data)
     return hex(prev_crc & 0xFF)[2:].zfill(2).encode()
 
