@@ -162,7 +162,6 @@ class E104_BT08(threading.Thread):
                 if err is not None:
                     if err.group(1) in AT_ERR:
                         raise Exception(AT_ERR[err.group(1)])
-                print(data)
                 return data
             time.sleep(0.03)
             if time.time() - start_time >= self.timeout:
