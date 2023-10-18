@@ -172,7 +172,6 @@ class E104_BT08(threading.Thread):
                         self.getflag = False
                         self.getcontflag = False
                     elif self.getflag and self.getcontflag:
-                        print(data, self.getfilename)
                         savedatas = data.split(b'\xff\xff')
                         for savedata in savedatas:
                             if savedata != b'':
