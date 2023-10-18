@@ -38,10 +38,15 @@ class E104_BT08(threading.Thread):
         self.isatreturn = False
         self.loopflag = True
         self.rebootflag = False
-        self.senddata = b''
+        self.senddata = []
         self.sendcrc = b''
         self.sendflag = False
         self.sendlen = 0
+        self.getflag = False
+        self.getfilename = b''
+        self.getlen = 0
+        self.getcrc = b''
+        self.getdata = []
         self.state = AT_STATE_DISCONNECT
         selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
         self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=selected_parity)
@@ -109,9 +114,8 @@ class E104_BT08(threading.Thread):
                     self.q.put(data)
                     self.isatreturn = False
                 elif self.sendflag and data[0:2] == b'\xff\xff' and len(data) == 10 \
-                        and all(chr(byte).isalnum() and chr(byte) in '0123456789ABCDEF' for byte in data[2:]):
+                        and all(chr(byte).isalnum() and chr(byte) in '0123456789abcdef' for byte in data[2:]):
                     split = int(data[2:8], 16)
-                    # 如果分卷大小大于或对应分卷crc不同重来
                     crc = data[-2:]
                     if split != b'000000':
                         if split < self.sendlen and hex(crc8(self.senddata[split - 1]))[2:].zfill(2).encode() == crc:
@@ -119,13 +123,54 @@ class E104_BT08(threading.Thread):
                             threading.Thread(target=self.send_data, args=(split,)).start()
                         elif split == self.sendlen and self.sendcrc == crc:
                             self.write(b'\xff\xffsendend')
+                            self.sendflag = False
                         else:
                             self.write(b'\xff\xff000000')
                             threading.Thread(target=self.send_data, args=(0,)).start()
-
                     else:
                         self.write(b'\xff\xff000000')
                         threading.Thread(target=self.send_data, args=(0,)).start()
+                elif data[0:2] == b'\xff\xff':
+
+                    if not self.getflag and all(chr(byte).isalnum()
+                                                and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
+                        datas = data.split(b'\xff')
+                        for data in datas:
+                            if data != b'':
+                                break
+                        self.getflag = True
+                        self.getcrc = data[-2:]
+                        self.getlen = int(data[-8:-2], 16)
+                        self.getfilename = data[:-8]
+                        if os.path.exists(str(self.getfilename)):
+                            with open(self.getfilename, 'rb') as file:
+                                while True:
+                                    filedata = file.read(18)
+                                    if not filedata:
+                                        break
+                                    self.getdata.append(filedata)
+                            if self.getlen == len(self.getdata) and self.getcrc == crc8_file(self.getfilename):
+                                self.write(data)
+                            elif self.getlen > len(self.getdata):
+                                redata = b'\xff\xff' + hex(len(self.getdata)).zfill(6).encode() \
+                                         + hex(crc8(self.getdata[-1]))[2:].zfill(2).encode()
+
+                                self.write(redata)
+                            else:
+                                self.write(b'\xff\xff00000000')
+
+                        else:
+                            self.write(b'\xff\xff00000000')
+                    elif self.getflag and data == b'\xff\xffsendend':
+                        self.getflag = False
+                    elif self.getflag:
+                        print(data,self.getfilename)
+                        savedatas = data.split(b'\xff\xff')
+                        for savedata in savedatas:
+                            if savedata != b'':
+                                with open(self.getfilename, "ab") as file:
+                                    file.write(savedata)
+
                 else:
                     self.f.write(data)
                     if self.datacallback:
@@ -419,11 +464,11 @@ class E104_BT08(threading.Thread):
         self.sendcrc = crc8_file(file_path)
         with open(file_path, 'rb') as file:
             while True:
-                data = file.read(18)
-                if not data:
+                filedata = file.read(18)
+                if not filedata:
                     break
-                print(data)
-                self.senddata.append(data)
+                print(filedata)
+                self.senddata.append(filedata)
         self.sendlen = len(self.senddata)
         split = hex(self.sendlen)[2:].zfill(6).encode()
         send_data = b'\xff\xff' + b'\xff' * (10 - len(save_file_name)) + save_file_name + split + self.sendcrc
@@ -470,16 +515,14 @@ def crc8(datas):
 def crc8_file(file_path):
     with open(file_path, 'rb') as file:
         while True:
-            data = file.read(8192)  # 一次读取一部分数据
-            if not data:
+            filedata = file.read(8192)  # 一次读取一部分数据
+            if not filedata:
                 break
-            prev_crc = crc8(data)
+            prev_crc = crc8(filedata)
     return hex(prev_crc & 0xFF)[2:].zfill(2).encode()
 
 
-def w_file(file_path, data):
-    with open(file_path, "a") as file:
-        file.write(data)
+
 
 
 def run_code(code):
