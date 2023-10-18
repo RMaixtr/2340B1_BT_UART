@@ -132,7 +132,6 @@ class E104_BT08(threading.Thread):
                         self.write(b'\xff\xff000000')
                         threading.Thread(target=self.send_data, args=(0,)).start()
                 elif data[0:2] == b'\xff\xff':
-
                     if not self.getflag and all(chr(byte).isalnum()
                                                 and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
                         datas = data.split(b'\xff')
@@ -143,8 +142,9 @@ class E104_BT08(threading.Thread):
                         self.getcrc = data[-2:]
                         self.getlen = int(data[-8:-2], 16)
                         self.getfilename = data[:-8]
-                        if os.path.exists(str(self.getfilename)):
-                            # print(self.getlen, len(self.getdata))
+
+                        if os.path.exists(str(self.getfilename.decode('utf-8'))):
+
                             with open(self.getfilename, 'rb') as file:
                                 while True:
                                     filedata = file.read(18)
@@ -154,7 +154,7 @@ class E104_BT08(threading.Thread):
                             if self.getlen == len(self.getdata) and self.getcrc == crc8_file(self.getfilename):
                                 self.write(data[-8:])
                             elif self.getlen > len(self.getdata):
-                                redata = b'\xff\xff' + hex(len(self.getdata)).zfill(6).encode() \
+                                redata = b'\xff\xff' + hex(len(self.getdata))[2:].zfill(6).encode() \
                                          + hex(crc8(self.getdata[-1]))[2:].zfill(2).encode()
 
                                 self.write(redata)
@@ -464,7 +464,7 @@ class E104_BT08(threading.Thread):
         return b'+OK\r\n' in self.__send_atdata(b'AT+BOND=' + para)
 
     def send_file(self, file_path, save_file_name):
-        if not os.path.exists(file_path):
+        if not os.path.exists(file_path.decode('utf-8')):
             return False
         if len(save_file_name) > 10:
             return False
