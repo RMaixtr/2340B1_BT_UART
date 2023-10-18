@@ -47,6 +47,7 @@ class E104_BT08(threading.Thread):
         self.getlen = 0
         self.getcrc = b''
         self.getdata = []
+        self.getcontflag = False
         self.state = AT_STATE_DISCONNECT
         selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
         self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=selected_parity)
@@ -143,6 +144,7 @@ class E104_BT08(threading.Thread):
                         self.getlen = int(data[-8:-2], 16)
                         self.getfilename = data[:-8]
                         if os.path.exists(str(self.getfilename)):
+                            # print(self.getlen, len(self.getdata))
                             with open(self.getfilename, 'rb') as file:
                                 while True:
                                     filedata = file.read(18)
@@ -150,7 +152,7 @@ class E104_BT08(threading.Thread):
                                         break
                                     self.getdata.append(filedata)
                             if self.getlen == len(self.getdata) and self.getcrc == crc8_file(self.getfilename):
-                                self.write(data)
+                                self.write(data[-8:])
                             elif self.getlen > len(self.getdata):
                                 redata = b'\xff\xff' + hex(len(self.getdata)).zfill(6).encode() \
                                          + hex(crc8(self.getdata[-1]))[2:].zfill(2).encode()
@@ -161,10 +163,16 @@ class E104_BT08(threading.Thread):
 
                         else:
                             self.write(b'\xff\xff00000000')
-                    elif self.getflag and data == b'\xff\xffsendend':
+                    elif self.getflag and not self.getcontflag:
+                        self.getcontflag = True
+                        if data == b'\xff\xff000000':
+                            with open(self.getfilename, "w") as file:
+                                file.truncate(0)
+                    elif self.getflag and self.getcontflag and data == b'\xff\xffsendend':
                         self.getflag = False
-                    elif self.getflag:
-                        print(data,self.getfilename)
+                        self.getcontflag = False
+                    elif self.getflag and self.getcontflag:
+                        print(data, self.getfilename)
                         savedatas = data.split(b'\xff\xff')
                         for savedata in savedatas:
                             if savedata != b'':
@@ -520,9 +528,6 @@ def crc8_file(file_path):
                 break
             prev_crc = crc8(filedata)
     return hex(prev_crc & 0xFF)[2:].zfill(2).encode()
-
-
-
 
 
 def run_code(code):
