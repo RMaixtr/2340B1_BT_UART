@@ -65,7 +65,7 @@ class E104_BT08(threading.Thread):
 
     def write(self, data):
         self.ser.flushInput()
-        self.ser.write(data)
+        self.ser.write(str(data).encode())
 
     def __init(self):
         while True:
@@ -492,6 +492,17 @@ class E104_BT08(threading.Thread):
         self.sendflag = False
         self.write(b'\xff\xffsendend')
 
+    def run_code(self, code):
+        sys.stdout = self
+        exec(code)
+        sys.stdout = sys.__stdout__
+
+    def run_file(self, file_path):
+        with open(file_path, 'r') as file:
+            file_content = file.read()
+        file.close()
+        self.run_code(file_content)
+
 
 e104_bt08 = E104_BT08()
 
@@ -528,32 +539,3 @@ def crc8_file(file_path):
                 break
             prev_crc = crc8(filedata)
     return hex(prev_crc & 0xFF)[2:].zfill(2).encode()
-
-
-def run_code(code):
-    sys.stdout = e104_bt08.ser
-
-    try:
-        exec(code)
-
-    except Exception as e:
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        traceback_details = {
-            'filename': exc_traceback.tb_frame.f_code.co_filename,
-            'lineno': exc_traceback.tb_lineno,
-            'name': exc_traceback.tb_frame.f_code.co_name,
-            'type': exc_type.__name__,
-            'message': str(e)
-        }
-        print("Exception in file '{filename}' at line {lineno}: {type} - {message}".format(**traceback_details))
-
-    # 恢复标准输出并获取捕获的输出
-    sys.stdout = sys.__stdout__
-
-
-def run_file(file_path):
-    file_path = file_path
-    with open(file_path, 'r') as file:
-        file_content = file.read()
-    file.close()
-    run_code(file_content)
