@@ -53,7 +53,7 @@ class E104_BT08(threading.Thread):
         self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=selected_parity)
         self.start()
         try:
-            self.__init()
+            self.init()
         except Exception:
             self.close()
             raise
@@ -67,7 +67,7 @@ class E104_BT08(threading.Thread):
         self.ser.flushInput()
         self.ser.write(str(data).encode())
 
-    def __init(self):
+    def init(self):
         while True:
             try:
                 self.__send_data(b'+++')
@@ -114,24 +114,27 @@ class E104_BT08(threading.Thread):
                 elif self.isatreturn:
                     self.q.put(data)
                     self.isatreturn = False
+                    # 发送等待接收方回应
                 elif self.sendflag and data[0:2] == b'\xff\xff' and len(data) == 10 \
                         and all(chr(byte).isalnum() and chr(byte) in '0123456789abcdef' for byte in data[2:]):
                     split = int(data[2:8], 16)
                     crc = data[-2:]
                     if split != b'000000':
                         if split < self.sendlen and hex(crc8(self.senddata[split - 1]))[2:].zfill(2).encode() == crc:
-                            self.write(b'\xff\xff' + data[2:8] + crc)
+                            self.write(b'\xff\xff\x01')
                             threading.Thread(target=self.send_data, args=(split,)).start()
                         elif split == self.sendlen and self.sendcrc == crc:
-                            self.write(b'\xff\xffsendend')
+                            self.write(b'\xff\xff\xff')
                             self.sendflag = False
                         else:
-                            self.write(b'\xff\xff000000')
+                            self.write(b'\xff\xff\x00')
                             threading.Thread(target=self.send_data, args=(0,)).start()
                     else:
-                        self.write(b'\xff\xff000000')
+                        self.write(b'\xff\xff\x00')
                         threading.Thread(target=self.send_data, args=(0,)).start()
+                    # 接收协议
                 elif data[0:2] == b'\xff\xff':
+                    # 接收收到传输协议返回
                     if not self.getflag and all(chr(byte).isalnum()
                                                 and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
                         datas = data.split(b'\xff')
@@ -142,9 +145,7 @@ class E104_BT08(threading.Thread):
                         self.getcrc = data[-2:]
                         self.getlen = int(data[-8:-2], 16)
                         self.getfilename = data[:-8]
-
                         if os.path.exists(str(self.getfilename.decode('utf-8'))):
-
                             with open(self.getfilename, 'rb') as file:
                                 while True:
                                     filedata = file.read(18)
@@ -163,14 +164,15 @@ class E104_BT08(threading.Thread):
 
                         else:
                             self.write(b'\xff\xff00000000')
+                    # 接收收到发送响应
                     elif self.getflag and not self.getcontflag:
                         self.getcontflag = True
-                        if data == b'\xff\xff000000':
+                        if data == b'\xff\xff\x00':
                             with open(self.getfilename, "w") as file:
                                 file.truncate(0)
-                    elif self.getflag and self.getcontflag and data == b'\xff\xffsendend':
-                        self.getflag = False
-                        self.getcontflag = False
+                        elif data == b'\xff\xff\xff':
+                            self.getflag = False
+                            self.getcontflag = False
                     elif self.getflag and self.getcontflag:
                         if b'\xff\xff' in data:
                             savedatas = data.split(b'\xff\xff')
@@ -178,6 +180,8 @@ class E104_BT08(threading.Thread):
                                 if savedata != b'':
                                     with open(self.getfilename, "ab") as file:
                                         file.write(savedata)
+                    # elif len(data) == 3:
+                    #     if
 
                 else:
                     self.f.write(data)
@@ -309,16 +313,18 @@ class E104_BT08(threading.Thread):
     def set_baudrate(self, baudrate):
         for key, val in AT_BAUD.items():
             if val == baudrate:
+                data = b'+OK\r\n' in self.__send_atdata(b'AT+BAUD=' + key)
                 self.ser.baudrate = baudrate
-                return b'+OK\r\n' in self.__send_atdata(b'AT+BAUD=' + key)
+                return data
         return False
 
     def get_parity(self):
         return re.search(b'PARI:(\d)', self.__send_atdata(b'AT+PARI=?')).group(1)
 
     def set_parity(self, parity):
+        data = b'+OK\r\n' in self.__send_atdata(b'AT+PARI=' + parity)
         self.ser.parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
-        return b'+OK\r\n' in self.__send_atdata(b'AT+PARI=' + parity)
+        return data
 
     def get_role(self):
         return re.search(b'ROLE:(\d)', self.__send_atdata(b'AT+ROLE=?')).group(1)
