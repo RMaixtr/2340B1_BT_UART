@@ -7,6 +7,8 @@ import json
 from io import BytesIO
 import sys
 import os
+import inspect
+import ctypes
 
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
     b'\r\n STA:connect\r\n', b'\r\n disconnect\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
@@ -14,9 +16,9 @@ AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19
            b'7': 38400, b'8': 57600, b'9': 76800, b'10': 115200, b'11': 230400, b'12': 500000, b'13': 1000000}
 AT_PARITY_NONE, AT_PARITY_ODD, AT_PARITY_EVEN = b'0', b'1', b'2'
 PARITY_MAPPING = {
+    AT_PARITY_NONE: serial.PARITY_NONE,
     AT_PARITY_ODD: serial.PARITY_ODD,
-    AT_PARITY_EVEN: serial.PARITY_EVEN,
-    AT_PARITY_NONE: serial.PARITY_NONE
+    AT_PARITY_EVEN: serial.PARITY_EVEN
 }
 AT_ROLE_HOST, AT_ROLE_SLAVE = b'0', b'1'
 AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = b'0', b'1', b'2'
@@ -28,13 +30,15 @@ AT_ERR = {b'1': '长度不匹配', b'2': '超过量程', b'3': '未找到参数'
 
 class E104_BT08(threading.Thread):
 
-    def __init__(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1, datacallback=[], statecallback=[]):
+    def __init__(self):
         threading.Thread.__init__(self)
+        self.ser = None
+        self.state = None
         self.q = queue.Queue()
         self.f = BytesIO()
-        self.timeout = timeout
-        self.datacallback = datacallback
-        self.statecallback = statecallback
+        self.timeout = 1
+        self.datacallback = []
+        self.statecallback = []
         self.isatreturn = False
         self.loopflag = True
         self.rebootflag = False
@@ -48,15 +52,7 @@ class E104_BT08(threading.Thread):
         self.getcrc = b''
         self.getdata = []
         self.getcontflag = False
-        self.state = AT_STATE_DISCONNECT
-        selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
-        self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=selected_parity)
-        self.start()
-        try:
-            self.init()
-        except Exception:
-            self.close()
-            raise
+        self.runthread = None
 
     def close(self):
         self.loopflag = False
@@ -67,7 +63,12 @@ class E104_BT08(threading.Thread):
         self.ser.flushInput()
         self.ser.write(str(data).encode())
 
-    def init(self):
+    def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1):
+        self.state = AT_STATE_DISCONNECT
+        self.timeout = timeout
+        selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
+        self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=selected_parity)
+        self.start()
         while True:
             try:
                 self.__send_data(b'+++')
@@ -91,7 +92,7 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                # print(self.isatreturn, data)
+                print(self.isatreturn, data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -132,11 +133,16 @@ class E104_BT08(threading.Thread):
                     else:
                         self.write(b'\xff\xff\x00')
                         threading.Thread(target=self.send_data, args=(0,)).start()
-                    # 接收协议
                 elif data[0:2] == b'\xff\xff':
+                    if data[2:3] == b'\x10':
+                        runfile = data[3:]
+                        self.runthread = threading.Thread(target=self.run_file, args=(runfile,))
+                        self.runthread.start()
+                    elif data[2:3] == b'\x11':
+                        self.stop_thread(self.runthread)
                     # 接收收到传输协议返回
-                    if not self.getflag and all(chr(byte).isalnum()
-                                                and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
+                    elif not self.getflag and all(chr(byte).isalnum()
+                                                  and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
                         datas = data.split(b'\xff')
                         for data in datas:
                             if data != b'':
@@ -180,8 +186,6 @@ class E104_BT08(threading.Thread):
                                 if savedata != b'':
                                     with open(self.getfilename, "ab") as file:
                                         file.write(savedata)
-                    # elif len(data) == 3:
-                    #     if
 
                 else:
                     self.f.write(data)
@@ -275,6 +279,19 @@ class E104_BT08(threading.Thread):
         self.set_power(data["PWR"])
         self.set_bondenable(data["BOND"])
 
+    def test_uart(self):
+        for par, serpar in PARITY_MAPPING.items():
+            self.ser.parity = serpar
+            for cont, baud in AT_BAUD.items():
+                self.ser.baudrate = baud
+                try:
+                    data = self.__send_data(b'+++')
+                    time.sleep(0.03)
+                except Exception as e:
+                    return baud, par
+                if b'enter_at_mode' in data:
+                    return baud, par
+        return None,None
     def add_data_callback(self, function):
         self.datacallback.append(function)
 
@@ -508,6 +525,23 @@ class E104_BT08(threading.Thread):
             file_content = file.read()
         file.close()
         self.run_code(file_content)
+
+    def _async_raise(self, tid, exctype):
+        """raises the exception, performs cleanup if needed"""
+        tid = ctypes.c_long(tid)
+        if not inspect.isclass(exctype):
+            exctype = type(exctype)
+        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, ctypes.py_object(exctype))
+        if res == 0:
+            raise ValueError("invalid thread id")
+        elif res != 1:
+            # """if it returns a number greater than one, you're in trouble,
+            # and you should call it again with exc=NULL to revert the effect"""
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, None)
+            raise SystemError("PyThreadState_SetAsyncExc failed")
+
+    def stop_thread(self, thread):
+        self._async_raise(thread.ident, SystemExit)
 
 
 e104_bt08 = E104_BT08()
