@@ -60,8 +60,11 @@ class E104_BT08(threading.Thread):
         self.ser.close()
 
     def write(self, data):
-        self.ser.flushInput()
-        self.ser.write(str(data).encode())
+        chunks = [data[i:i + 20] for i in range(0, len(data), 20)]
+        for writedata in chunks:
+            self.ser.flushInput()
+            self.ser.write(str(writedata).encode())
+            time.sleep(0.03)
 
     def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1):
         self.state = AT_STATE_DISCONNECT
@@ -123,18 +126,15 @@ class E104_BT08(threading.Thread):
                     if split != b'000000':
                         if split < self.sendlen and hex(crc8(self.senddata[split - 1]))[2:].zfill(2).encode() == crc:
                             self.write(b'\xff\xff\x01')
-                            time.sleep(0.03)
                             threading.Thread(target=self.send_data, args=(split,)).start()
                         elif split == self.sendlen and self.sendcrc == crc:
                             self.write(b'\xff\xff\xff')
                             self.sendflag = False
                         else:
                             self.write(b'\xff\xff\x00')
-                            time.sleep(0.03)
                             threading.Thread(target=self.send_data, args=(0,)).start()
                     else:
                         self.write(b'\xff\xff\x00')
-                        time.sleep(0.03)
                         threading.Thread(target=self.send_data, args=(0,)).start()
                 elif data[0:2] == b'\xff\xff':
                     if data[2:3] == b'\x10':
