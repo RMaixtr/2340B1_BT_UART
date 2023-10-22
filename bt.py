@@ -325,7 +325,10 @@ class E104_BT08(threading.Thread):
         return b'+OK\r\n' in self.__send_atdata(b'AT+RESET')
 
     def restore(self):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+RESTORE')
+        redata = b'+OK\r\n' in self.__send_atdata(b'AT+RESTORE')
+        self.ser.baudrate = 115200
+        self.ser.parity = serial.PARITY_NONE
+        return redata
 
     def get_baudrate(self):
         baudnum = re.search(b'BAUD:(\d+)', self.__send_atdata(b'AT+BAUD=?'))
@@ -525,6 +528,7 @@ class E104_BT08(threading.Thread):
             exec(code)
         except Exception as e:
             self.write(str(e))
+            # self.restore()
         sys.stdout = sys.__stdout__
 
     def run_file(self, file_path):
