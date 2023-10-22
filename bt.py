@@ -88,6 +88,7 @@ class E104_BT08(threading.Thread):
             time.sleep(0.1)
             if time.time() - start_time >= self.timeout:
                 raise TimeoutError("等待蓝牙重启超时")
+        # self.set_baudrate(1000000)
 
     def run(self):
         while self.loopflag:
@@ -520,7 +521,10 @@ class E104_BT08(threading.Thread):
 
     def run_code(self, code):
         sys.stdout = self
-        exec(code)
+        try:
+            exec(code)
+        except Exception as e:
+            self.write(str(e))
         sys.stdout = sys.__stdout__
 
     def run_file(self, file_path):
