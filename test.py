@@ -43,6 +43,7 @@ def unit_test_loop_write_read():
 
 
 if __name__ == '__main__':
+    e104_bt08.init()
     e104_bt08.add_state_callback(bt08_state_callback)
     e104_bt08.add_data_callback(bt08_data_callback)
     unit_test_loop_change_id()
