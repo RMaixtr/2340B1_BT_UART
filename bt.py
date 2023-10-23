@@ -96,7 +96,7 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                print(self.isatreturn, data)
+                # print(self.isatreturn, data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -505,7 +505,6 @@ class E104_BT08(threading.Thread):
                 filedata = file.read(18)
                 if not filedata:
                     break
-                print(filedata)
                 self.senddata.append(filedata)
         self.sendlen = len(self.senddata)
         split = hex(self.sendlen)[2:].zfill(6).encode()
@@ -536,6 +535,12 @@ class E104_BT08(threading.Thread):
             file_content = file.read()
         file.close()
         self.run_code(file_content)
+
+    def slave_run(self, file_path):
+        self.write(b'\xff\xff\x10'+file_path)
+
+    def slave_stop(self):
+        self.write(b'\xff\xff\x11')
 
     def _async_raise(self, tid, exctype):
         """raises the exception, performs cleanup if needed"""
