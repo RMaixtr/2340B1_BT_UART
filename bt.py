@@ -163,7 +163,7 @@ class E104_BT08(threading.Thread):
                                         break
                                     self.getdata.append(filedata)
                             if self.getlen == len(self.getdata) and self.getcrc == crc8_file(self.getfilename):
-                                self.write(data[-8:])
+                                self.write(b'\xff\xff' + data[-8:])
                             elif self.getlen > len(self.getdata):
                                 redata = b'\xff\xff' + hex(len(self.getdata))[2:].zfill(6).encode() \
                                          + hex(crc8(self.getdata[-1]))[2:].zfill(2).encode()
