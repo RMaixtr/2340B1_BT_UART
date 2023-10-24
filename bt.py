@@ -63,7 +63,10 @@ class E104_BT08(threading.Thread):
         chunks = [data[i:i + 20] for i in range(0, len(data), 20)]
         for writedata in chunks:
             self.ser.flushInput()
-            self.ser.write(str(writedata).encode())
+            if type(chunks) == bytes:
+                self.ser.write(chunks)
+            elif type(chunks) == str:
+                self.ser.write(writedata.encode())
             time.sleep(0.03)
 
     def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1):
