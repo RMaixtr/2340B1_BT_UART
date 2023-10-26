@@ -53,6 +53,7 @@ class E104_BT08(threading.Thread):
         self.getdata = []
         self.getcontflag = False
         self.runthread = None
+        self.hostglobals = None
 
     def close(self):
         self.loopflag = False
@@ -69,7 +70,8 @@ class E104_BT08(threading.Thread):
                 self.ser.write(writedata.encode())
             time.sleep(0.03)
 
-    def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1):
+    def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1, _globals=globals()):
+        self.hostglobals = _globals
         self.state = AT_STATE_DISCONNECT
         self.timeout = timeout
         selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
@@ -531,7 +533,7 @@ class E104_BT08(threading.Thread):
     def run_code(self, code):
         sys.stdout = self
         # try:
-            exec(code)
+        exec(code, {**globals(), **self.hostglobals}, locals())
         # except Exception as e:
             # self.write(str(e))
             # self.restore()
