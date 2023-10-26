@@ -522,14 +522,14 @@ class E104_BT08(threading.Thread):
             time.sleep(0.07)
             split += 1
         self.sendflag = False
-        self.write(b'\xff\xffsendend')
+        self.write(b'\xff\xff\xff')
 
     def run_code(self, code):
         sys.stdout = self
-        try:
+        # try:
             exec(code)
-        except Exception as e:
-            self.write(str(e))
+        # except Exception as e:
+            # self.write(str(e))
             # self.restore()
         sys.stdout = sys.__stdout__
 
