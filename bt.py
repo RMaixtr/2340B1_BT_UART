@@ -187,7 +187,10 @@ class E104_BT08(threading.Thread):
                             self.getflag = False
                             self.getcontflag = False
                     elif self.getflag and self.getcontflag:
-                        if b'\xff\xff' in data:
+                        if data == b'\xff\xff\xff':
+                            self.getflag = False
+                            self.getcontflag = False
+                        elif b'\xff\xff' in data:
                             savedatas = data.split(b'\xff\xff')
                             for savedata in savedatas:
                                 if savedata != b'':
@@ -517,6 +520,7 @@ class E104_BT08(threading.Thread):
         return True
 
     def send_data(self, split):
+        time.sleep(1)
         while self.sendlen != split:
             self.write(b'\xff\xff' + self.senddata[split])
             time.sleep(0.07)
