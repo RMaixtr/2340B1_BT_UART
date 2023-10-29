@@ -1,0 +1,5 @@
+int string lib_name 0x0
+int string ota_error 0x0
+int string update_cancel 0x0
+int string update_retry 0x0
+int string updating 0x0
