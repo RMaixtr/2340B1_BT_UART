@@ -8,5 +8,4 @@ if __name__ == '__main__':
     hello_img.draw_string(30, 115, "wait", scale = 3,
                                   color = (255, 255, 255), thickness = 1)
     display.show(hello_img)
-    e104_bt08.init(_globals=globals())
     input("wait host run code...")
