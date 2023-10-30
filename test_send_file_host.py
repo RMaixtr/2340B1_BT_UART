@@ -3,7 +3,7 @@ from bt import e104_bt08
 
 if __name__ == '__main__':
     # 主机要发送给从机的程序 example.py
-    with open('example .py', 'rb') as f:
+    with open('example.py', 'rb') as f:
         example = f.read()
     print(example)
 
