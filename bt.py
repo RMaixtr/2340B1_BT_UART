@@ -66,14 +66,10 @@ class E104_BT08(threading.Thread):
         self.ser.close()
 
     def write(self, data):
-        chunks = [data[i:i + 20] for i in range(0, len(data), 20)]
-        for writedata in chunks:
-            self.ser.flushInput()
-            if type(chunks) == bytes:
-                self.ser.write(chunks)
-            elif type(chunks) == str:
-                self.ser.write(writedata.encode())
-            time.sleep(0.03)
+        if type(data) == bytes:
+            self.ser.write(data)
+        elif type(data) == str:
+            self.ser.write(data.encode())
 
     def set_globals(self, _globals):
         self.hostglobals = _globals
