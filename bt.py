@@ -10,6 +10,7 @@ import os
 import inspect
 import ctypes
 
+# from maix import camera, display, image # 在模块中导入运行文本文件所需的模块,或于主代码处导入模块,使用set_globals导入主代码globals
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
     b'\r\n STA:connect\r\n', b'\r\n disconnect\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
 AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19200, b'6': 28800,
@@ -54,6 +55,10 @@ class E104_BT08(threading.Thread):
         self.getcontflag = False
         self.runthread = None
         self.hostglobals = None
+        self.init()
+
+    def __del__(self):
+        self.close()
 
     def close(self):
         self.loopflag = False
@@ -70,8 +75,10 @@ class E104_BT08(threading.Thread):
                 self.ser.write(writedata.encode())
             time.sleep(0.03)
 
-    def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1, _globals=globals()):
+    def set_globals(self, _globals):
         self.hostglobals = _globals
+
+    def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1):
         self.state = AT_STATE_DISCONNECT
         self.timeout = timeout
         selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
@@ -135,6 +142,7 @@ class E104_BT08(threading.Thread):
                             threading.Thread(target=self.send_data, args=(split,)).start()
                         elif split == self.sendlen and self.sendcrc == crc:
                             self.write(b'\xff\xff\xff')
+                            time.sleep(0.05)
                             self.sendflag = False
                         else:
                             self.write(b'\xff\xff\x00')
@@ -303,7 +311,8 @@ class E104_BT08(threading.Thread):
                     return baud, par
                 if b'enter_at_mode' in data:
                     return baud, par
-        return None,None
+        return None, None
+
     def add_data_callback(self, function):
         self.datacallback.append(function)
 
@@ -501,11 +510,11 @@ class E104_BT08(threading.Thread):
     def set_bondenable(self, para):
         return b'+OK\r\n' in self.__send_atdata(b'AT+BOND=' + para)
 
-    def send_file(self, file_path, save_file_name):
+    def send_file(self, file_path, save_file_name=b'bt_tmp.log'):
         if not os.path.exists(file_path.decode('utf-8')):
             return False
         if len(save_file_name) > 10:
-            return False
+            save_file_name = b'bt_tmp.log'
         self.senddata = []
         self.sendcrc = crc8_file(file_path)
         with open(file_path, 'rb') as file:
@@ -527,26 +536,28 @@ class E104_BT08(threading.Thread):
             self.write(b'\xff\xff' + self.senddata[split])
             time.sleep(0.07)
             split += 1
-        self.sendflag = False
         self.write(b'\xff\xff\xff')
+        time.sleep(0.05)
+        self.sendflag = False
 
     def run_code(self, code):
         sys.stdout = self
         # try:
         exec(code, {**globals(), **self.hostglobals}, locals())
         # except Exception as e:
-            # self.write(str(e))
-            # self.restore()
+        # self.write(str(e))
+        # self.restore()
         sys.stdout = sys.__stdout__
 
-    def run_file(self, file_path):
+    def run_file(self, file_path=b'bt_tmp.log'):
+        os.path.exists(file_path.decode('utf-8'))
         with open(file_path, 'r') as file:
             file_content = file.read()
         file.close()
         self.run_code(file_content)
 
     def slave_run(self, file_path):
-        self.write(b'\xff\xff\x10'+file_path)
+        self.write(b'\xff\xff\x10' + file_path)
 
     def slave_stop(self):
         self.write(b'\xff\xff\x11')
