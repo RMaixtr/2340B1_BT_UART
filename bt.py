@@ -68,7 +68,7 @@ class E104_BT08(threading.Thread):
     def write(self, data):
         if type(data) == bytes:
             self.ser.write(data)
-        elif type(data) == str:
+        else:
             self.ser.write(data.encode())
 
     def set_globals(self, _globals):
