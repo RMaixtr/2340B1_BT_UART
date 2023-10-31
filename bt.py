@@ -12,7 +12,7 @@ import ctypes
 
 # from maix import camera, display, image # 在模块中导入运行文本文件所需的模块,或于主代码处导入模块,使用set_globals导入主代码globals
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
-    b'\r\n STA:connect\r\n', b'\r\n disconnect\r\n', b'\r\n STA:wakeup\r\n', b'\r\n STA:sleep\r\n'
+    b'\r\n STA:connect', b'\r\n disconnect', b'\r\n STA:wakeup', b'\r\n STA:sleep'
 AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19200, b'6': 28800,
            b'7': 38400, b'8': 57600, b'9': 76800, b'10': 115200, b'11': 230400, b'12': 500000, b'13': 1000000}
 AT_PARITY_NONE, AT_PARITY_ODD, AT_PARITY_EVEN = b'0', b'1', b'2'
