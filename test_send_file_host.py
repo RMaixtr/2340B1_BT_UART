@@ -14,7 +14,9 @@ def bt08_state_callback(self, data):
 if __name__ == '__main__':
     # 设置蓝牙角色为主机,当两个蓝牙模块处于同一环境bondenable配置为disable且一个为主机一个为从机,会自动连接(此时通过UUID过滤)
     # 当未对蓝牙模块配置过时,要使处于同一环境的两个蓝牙模块自动连接只需配置一个为主机一个为从机
-    # 当存在多个模块时需要知道想连接的mac,需将bondenable配置为able,通过set_bondmac设置绑定mac(此时通过mac过滤)
+    # 当存在多个模块时
+    #   若知道想连接的mac(通过get_mac获取),需将bondenable配置为able,通过set_bondmac设置绑定mac(此时通过mac过滤)
+    #   若不知道想连接的mac,需将bondenable配置为disable,通过set_uuidserver单独给两个欲连接设备设置uuidserver(此时通过UUID过滤)
     e104_bt08.set_role(bt.AT_ROLE_HOST)
     e104_bt08.reset()  # 重启后生效
     e104_bt08.add_state_callback(bt08_state_callback)
