@@ -26,8 +26,9 @@ public class rg_startup_class extends volcano.android.base.rg_win {
     protected cn.com.heaton.blelibrary.ble.model.BleDevice rg_DangQianXuanZhongSheBei;
     protected volcano.android.base.rg_JinDuDuiHuaKuangLei rg_JinDuDuiHuaKuang;
     protected String [] rg_FenGe;
-    protected static final String rg_SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb";
-    protected static final String rg_CHARA_UUID = "0000ffe1-0000-1000-8000-00805f9b34fb";
+    protected static final String rg_SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb";
+    protected static final String rg_CHARA_UUID = "0000fff2-0000-1000-8000-00805f9b34fb";
+    protected static final String rg_CHARA_UUID1 = "0000fff1-0000-1000-8000-00805f9b34fb";
 
     {
         rg_LaYaDuiXiang.rl_DiGongHaoLaYaLei_ChuShiHuaChengGong (new volcano.android.device.dghlycz.rg_DiGongHaoLaYaLei.re_ChuShiHuaChengGong () {
@@ -510,7 +511,7 @@ public class rg_startup_class extends volcano.android.base.rg_win {
     }
 
     protected int rg_DiGongHaoLaYaLei_FaXianZhiDingFuWu (volcano.android.device.dghlycz.rg_DiGongHaoLaYaLei rg_LaiYuanDuiXiang17, int rg_BiaoJiZhi17, cn.com.heaton.blelibrary.ble.model.BleDevice rg_MuBiaoSheBei5, android.bluetooth.BluetoothGatt rg_GATTDuiXiang) {
-        rg_LaYaDuiXiang.rg_ZhiSheBeiZhiDingBiaoShiTongZhi (rg_MuBiaoSheBei5, true, java.util.UUID.fromString(rg_SERVICE_UUID), java.util.UUID.fromString(rg_CHARA_UUID));
+        rg_LaYaDuiXiang.rg_ZhiSheBeiZhiDingBiaoShiTongZhi (rg_MuBiaoSheBei5, true, java.util.UUID.fromString(rg_SERVICE_UUID), java.util.UUID.fromString(rg_CHARA_UUID1));
         return (0);
     }
 
