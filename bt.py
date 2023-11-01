@@ -611,16 +611,21 @@ class E104_BT08(threading.Thread):
         self.run_code(file_content)
 
     def slave_run(self, file_path=b'bt_tmp.log'):
+        if self.sendflag:
+            return False
         if self.runflag:
             self.slave_stop()
             time.sleep(0.07)
         self.runflag = True
         self.write(b'\xff\xff\x10' + file_path)
+        return True
 
     def slave_stop(self):
         if self.runflag:
             self.runflag = False
             self.write(b'\xff\xff\x11')
+            return True
+        return False
 
     def _async_raise(self, tid, exctype):
         """raises the exception, performs cleanup if needed"""
