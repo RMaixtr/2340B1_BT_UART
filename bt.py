@@ -190,13 +190,30 @@ class E104_BT08(threading.Thread):
                     elif self.getflag and not self.getcontflag:
                         self.getcontflag = True
                         if data == b'\xff\xff\x00':
-                            with open(self.getfilename, "w") as file:
+                            with open(self.getfilename, "wb") as file:
                                 file.truncate(0)
                         elif data == b'\xff\xff\xff':
+                            endgetdata = []
+                            with open(self.getfilename, 'rb') as file:
+                                while True:
+                                    endfiledata = file.read(18)
+                                    if not endfiledata:
+                                        break
+                                    endgetdata.append(endfiledata)
+                            self.write(b'\xff\xff'+hex(self.sendlen)[2:].zfill(6).encode()+crc8_file(self.getfilename))
                             self.getflag = False
                             self.getcontflag = False
                     elif self.getflag and self.getcontflag:
                         if data == b'\xff\xff\xff':
+                            endgetdata = []
+                            with open(self.getfilename, 'rb') as file:
+                                while True:
+                                    endfiledata = file.read(18)
+                                    if not endfiledata:
+                                        break
+                                    endgetdata.append(endfiledata)
+                            self.write(
+                                b'\xff\xff' + hex(self.sendlen)[2:].zfill(6).encode() + crc8_file(self.getfilename))
                             self.getflag = False
                             self.getcontflag = False
                         elif b'\xff\xff' in data:
