@@ -154,6 +154,8 @@ class E104_BT08(threading.Thread):
                         self.runthread.start()
                     elif data[2:3] == b'\x11':
                         self.stop_thread(self.runthread)
+                    elif data[2:3] == b'\x1f':
+                        self.runflag = False
                     # 接收收到传输协议返回
                     elif not self.getflag and all(chr(byte).isalnum()
                                                   and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
@@ -549,6 +551,7 @@ class E104_BT08(threading.Thread):
         # except Exception as e:
         # self.write(str(e))
         # self.restore()
+        self.write(b'\xff\xff\x1f')
         sys.stdout = sys.__stdout__
 
     def run_file(self, file_path=b'bt_tmp.log'):
