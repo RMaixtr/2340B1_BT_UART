@@ -571,14 +571,14 @@ class E104_BT08(threading.Thread):
         self.write(b'\xff\xff\x1f')
         sys.stdout = sys.__stdout__
 
-    def run_file(self, file_path=b'bt_tmp.log'):
+    def run_file(self, file_path):
         os.path.exists(file_path.decode('utf-8'))
         with open(file_path, 'r') as file:
             file_content = file.read()
         file.close()
         self.run_code(file_content)
 
-    def slave_run(self, file_path):
+    def slave_run(self, file_path=b'bt_tmp.log'):
         if self.runflag:
             slave_stop()
             time.sleep(1)
