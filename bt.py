@@ -259,13 +259,13 @@ class E104_BT08(threading.Thread):
                     self.issendreturn = False
                     for call in self.sendendcallback:
                         call(self, False)
-                        if self.connectdelayflag:
-            if time.time() - self.connectdelaytime >= 3:
-                self.connectdelayflag = False
-                self.state = AT_STATE_CONNECT
-                if self.statecallback:
-                    for call in self.statecallback:
-                        call(self, AT_STATE_CONNECT)
+            if self.connectdelayflag:
+                if time.time() - self.connectdelaytime >= 3:
+                    self.connectdelayflag = False
+                    self.state = AT_STATE_CONNECT
+                    if self.statecallback:
+                        for call in self.statecallback:
+                            call(self, AT_STATE_CONNECT)
 
     def is_connected(self):
         return self.get_state() == AT_STATE_CONNECT
