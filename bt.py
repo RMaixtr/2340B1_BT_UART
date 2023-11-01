@@ -119,6 +119,7 @@ class E104_BT08(threading.Thread):
                     AT_STATE_SLEEP
                 }:
                     if state in data:
+                        self.connectdelayflag = False
                         isstatedata = True
                         if state == b'START\r\n':
                             self.rebootflag = True
