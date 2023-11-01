@@ -547,6 +547,7 @@ class E104_BT08(threading.Thread):
         self.sendlen = len(self.senddata)
         split = hex(self.sendlen)[2:].zfill(6).encode()
         send_data = b'\xff\xff' + b'\xff' * (10 - len(save_file_name)) + save_file_name + split + self.sendcrc
+        time.sleep(1)
         self.write(send_data)
         self.sendflag = True
         return True
@@ -564,7 +565,10 @@ class E104_BT08(threading.Thread):
     def run_code(self, code):
         sys.stdout = self
         # try:
-        exec(code, {**globals(), **self.hostglobals}, locals())
+        if hostglobals:
+            exec(code, {**globals(), **self.hostglobals}, locals())
+        else:
+            exec(code, globals(), locals())
         # except Exception as e:
         # self.write(str(e))
         # self.restore()
