@@ -55,6 +55,7 @@ class E104_BT08(threading.Thread):
         self.getcontflag = False
         self.runthread = None
         self.hostglobals = None
+        self.runflag = False
         self.init()
 
     def __del__(self):
@@ -212,6 +213,9 @@ class E104_BT08(threading.Thread):
 
     def is_connected(self):
         return self.get_state() == AT_STATE_CONNECT
+
+    def send_finish(self):
+        return not self.sendflag
 
     def read(self):
         self.f.seek(0)
@@ -507,6 +511,8 @@ class E104_BT08(threading.Thread):
         return b'+OK\r\n' in self.__send_atdata(b'AT+BOND=' + para)
 
     def send_file(self, file_path, save_file_name=b'bt_tmp.log'):
+        if self.sendflag:
+            return False
         if not os.path.exists(file_path.decode('utf-8')):
             return False
         if len(save_file_name) > 10:
@@ -553,10 +559,16 @@ class E104_BT08(threading.Thread):
         self.run_code(file_content)
 
     def slave_run(self, file_path):
+        if self.runflag:
+            slave_stop()
+            time.sleep(1)
+        self.runflag = True
         self.write(b'\xff\xff\x10' + file_path)
 
     def slave_stop(self):
-        self.write(b'\xff\xff\x11')
+        if self.runflag:
+            self.runflag = False
+            self.write(b'\xff\xff\x11')
 
     def _async_raise(self, tid, exctype):
         """raises the exception, performs cleanup if needed"""
