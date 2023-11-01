@@ -200,7 +200,7 @@ class E104_BT08(threading.Thread):
                                     if not endfiledata:
                                         break
                                     endgetdata.append(endfiledata)
-                            self.write(b'\xff\xff'+hex(self.sendlen)[2:].zfill(6).encode()+crc8_file(self.getfilename))
+                            self.write(b'\xff\xff'+hex(len(endgetdata))[2:].zfill(6).encode()+crc8_file(self.getfilename))
                             self.getflag = False
                             self.getcontflag = False
                     elif self.getflag and self.getcontflag:
@@ -212,8 +212,7 @@ class E104_BT08(threading.Thread):
                                     if not endfiledata:
                                         break
                                     endgetdata.append(endfiledata)
-                            self.write(
-                                b'\xff\xff' + hex(self.sendlen)[2:].zfill(6).encode() + crc8_file(self.getfilename))
+                            self.write(b'\xff\xff'+hex(len(endgetdata))[2:].zfill(6).encode()+crc8_file(self.getfilename))
                             self.getflag = False
                             self.getcontflag = False
                         elif b'\xff\xff' in data:
