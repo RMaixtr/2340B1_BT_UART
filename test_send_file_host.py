@@ -40,7 +40,6 @@ if __name__ == '__main__':
             state = 0
         elif state == 0:
             if e104_bt08.is_connected():
-                time.sleep(5)  # 延时一下,两个模块刚连接发送信息有几率发不出去
                 e104_bt08.send_file(b'example.py')
                 state = 1
         elif state == 1:
