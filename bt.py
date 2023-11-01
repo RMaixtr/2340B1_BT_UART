@@ -40,7 +40,9 @@ class E104_BT08(threading.Thread):
         self.timeout = 1
         self.datacallback = []
         self.statecallback = []
+        self.sendendcallback = []
         self.isatreturn = False
+        self.issendreturn = False
         self.loopflag = True
         self.rebootflag = False
         self.senddata = []
@@ -336,13 +338,18 @@ class E104_BT08(threading.Thread):
 
     def add_state_callback(self, function):
         self.statecallback.append(function)
+    
+    def add_sendend_callback(self, function):
+        self.sendendcallback.append(function)
 
     def del_data_callback(self, function=None):
         self.datacallback.remove(function) if function else self.datacallback.pop()
 
     def del_state_callback(self, function=None):
         self.statecallback.remove(function) if function else self.statecallback.pop()
-
+        
+    def del_sendend_callback(self, function=None):
+        self.sendendcallback.remove(function) if function else self.sendendcallback.pop()
     def set_uart(self, baudrate=115200, parity=AT_PARITY_NONE):
         self.ser.baudrate = baudrate
         self.ser.parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
@@ -557,9 +564,8 @@ class E104_BT08(threading.Thread):
             self.write(b'\xff\xff' + self.senddata[split])
             time.sleep(0.07)
             split += 1
+        self.issendreturn = True
         self.write(b'\xff\xff\xff')
-        time.sleep(0.05)
-        self.sendflag = False
 
     def run_code(self, code):
         sys.stdout = self
