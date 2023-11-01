@@ -11,6 +11,10 @@ def bt08_state_callback(self, data):
     print("statechange", data)
 
 
+def bt08_sendend_callback(self, state):
+    print("sendend", state)
+
+
 if __name__ == '__main__':
     # 设置蓝牙角色为主机,当两个蓝牙模块处于同一环境bondenable配置为disable且一个为主机一个为从机,会自动连接(此时通过UUID过滤)
     # 当未对蓝牙模块配置过时,要使处于同一环境的两个蓝牙模块自动连接只需配置一个为主机一个为从机
@@ -23,6 +27,7 @@ if __name__ == '__main__':
     e104_bt08.reset()  # 重启后生效
     e104_bt08.add_state_callback(bt08_state_callback)
     e104_bt08.add_data_callback(bt08_data_callback)
+    e104_bt08.add_sendend_callback(bt08_sendend_callback)
     # 主机要发送给从机的程序 example.py
     with open('example .py', 'rb') as f:
         example = f.read()
@@ -35,6 +40,7 @@ if __name__ == '__main__':
             state = 0
         elif state == 0:
             if e104_bt08.is_connected():
+                time.sleep(5)  # 延时一下,两个模块刚连接发送信息有几率发不出去
                 e104_bt08.send_file(b'example.py')
                 state = 1
         elif state == 1:
