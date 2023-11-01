@@ -613,8 +613,8 @@ class E104_BT08(threading.Thread):
 
     def slave_run(self, file_path=b'bt_tmp.log'):
         if self.runflag:
-            slave_stop()
-            time.sleep(1)
+            self.slave_stop()
+            time.sleep(0.07)
         self.runflag = True
         self.write(b'\xff\xff\x10' + file_path)
 
