@@ -43,6 +43,7 @@ class E104_BT08(threading.Thread):
         self.sendendcallback = []
         self.isatreturn = False
         self.issendreturn = False
+        self.sendendtime = 0
         self.loopflag = True
         self.rebootflag = False
         self.senddata = []
@@ -107,7 +108,7 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                # print(self.isatreturn, data)
+                print(self.isatreturn, data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -130,6 +131,22 @@ class E104_BT08(threading.Thread):
                 elif self.isatreturn:
                     self.q.put(data)
                     self.isatreturn = False
+                elif self.issendreturn:
+                    if data[0:2] == b'\xff\xff' and len(data) == 10 \
+                            and all(chr(byte).isalnum() and chr(byte) in '0123456789abcdef' for byte in data[2:]):
+                        split = int(data[2:8], 16)
+                        crc = data[-2:]
+                        if split == self.sendlen and self.sendcrc == crc:
+                            for call in self.sendendcallback:
+                                call(self, True)
+                        else:
+                            for call in self.sendendcallback:
+                                call(self, False)
+                        self.sendflag = False
+                        self.issendreturn = False
+                    else:
+                        for call in self.datacallback:
+                            call(self, data)
                     # 发送等待接收方回应
                 elif self.sendflag and data[0:2] == b'\xff\xff' and len(data) == 10 \
                         and all(chr(byte).isalnum() and chr(byte) in '0123456789abcdef' for byte in data[2:]):
@@ -141,8 +158,8 @@ class E104_BT08(threading.Thread):
                             threading.Thread(target=self.send_data, args=(split,)).start()
                         elif split == self.sendlen and self.sendcrc == crc:
                             self.write(b'\xff\xff\xff')
-                            time.sleep(0.05)
-                            self.sendflag = False
+                            self.sendendtime = time.time()
+                            self.issendreturn = True
                         else:
                             self.write(b'\xff\xff\x00')
                             threading.Thread(target=self.send_data, args=(0,)).start()
@@ -202,7 +219,7 @@ class E104_BT08(threading.Thread):
                                     if not endfiledata:
                                         break
                                     endgetdata.append(endfiledata)
-                            self.write(b'\xff\xff'+hex(len(endgetdata))[2:].zfill(6).encode()+crc8_file(self.getfilename))
+                            self.write(b'\xff\xff'+hex(self.sendlen)[2:].zfill(6).encode()+crc8_file(self.getfilename))
                             self.getflag = False
                             self.getcontflag = False
                     elif self.getflag and self.getcontflag:
@@ -214,7 +231,8 @@ class E104_BT08(threading.Thread):
                                     if not endfiledata:
                                         break
                                     endgetdata.append(endfiledata)
-                            self.write(b'\xff\xff'+hex(len(endgetdata))[2:].zfill(6).encode()+crc8_file(self.getfilename))
+                            self.write(
+                                b'\xff\xff' + hex(self.sendlen)[2:].zfill(6).encode() + crc8_file(self.getfilename))
                             self.getflag = False
                             self.getcontflag = False
                         elif b'\xff\xff' in data:
@@ -223,13 +241,18 @@ class E104_BT08(threading.Thread):
                                 if savedata != b'':
                                     with open(self.getfilename, "ab") as file:
                                         file.write(savedata)
-
                 else:
                     self.f.write(data)
                     if self.datacallback:
                         for call in self.datacallback:
                             call(self, data)
             time.sleep(0.05)
+            if self.issendreturn:
+                if time.time() - self.sendendtime >= 2*self.timeout:
+                    self.sendflag = False
+                    self.issendreturn = False
+                    for call in self.sendendcallback:
+                        call(self, False)
 
     def is_connected(self):
         return self.get_state() == AT_STATE_CONNECT
@@ -566,6 +589,7 @@ class E104_BT08(threading.Thread):
             split += 1
         self.issendreturn = True
         self.write(b'\xff\xff\xff')
+        self.sendendtime = time.time()
 
     def run_code(self, code):
         sys.stdout = self
