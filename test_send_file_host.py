@@ -38,7 +38,7 @@ if __name__ == '__main__':
                 e104_bt08.send_file(b'example.py')
                 state = 1
         elif state == 1:
-            if e104_bt08.sendflag:
+            if e104_bt08.send_finish():
                 e104_bt08.slave_run()
                 state = 2
                 start_time = time.time()
