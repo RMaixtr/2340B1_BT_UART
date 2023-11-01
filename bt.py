@@ -565,7 +565,7 @@ class E104_BT08(threading.Thread):
     def run_code(self, code):
         sys.stdout = self
         # try:
-        if hostglobals:
+        if self.hostglobals:
             exec(code, {**globals(), **self.hostglobals}, locals())
         else:
             exec(code, globals(), locals())
