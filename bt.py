@@ -59,6 +59,8 @@ class E104_BT08(threading.Thread):
         self.runthread = None
         self.hostglobals = None
         self.runflag = False
+        self.connectdelayflag = False
+        self.connectdelaytime = 0
         self.init()
 
     def __del__(self):
@@ -118,10 +120,14 @@ class E104_BT08(threading.Thread):
                 }:
                     if state in data:
                         isstatedata = True
-                        self.state = state
                         if state == b'START\r\n':
                             self.rebootflag = True
                             self.state = AT_STATE_DISCONNECT
+                        elif state == AT_STATE_CONNECT:
+                            self.connectdelayflag = True
+                            self.connectdelaytime = time.time()
+                            break
+                        self.state = state
                         if self.statecallback:
                             for call in self.statecallback:
                                 call(self, state)
@@ -253,6 +259,13 @@ class E104_BT08(threading.Thread):
                     self.issendreturn = False
                     for call in self.sendendcallback:
                         call(self, False)
+                        if self.connectdelayflag:
+            if time.time() - self.connectdelaytime >= 3:
+                self.connectdelayflag = False
+                self.state = AT_STATE_CONNECT
+                if self.statecallback:
+                    for call in self.statecallback:
+                        call(self, AT_STATE_CONNECT)
 
     def is_connected(self):
         return self.get_state() == AT_STATE_CONNECT
