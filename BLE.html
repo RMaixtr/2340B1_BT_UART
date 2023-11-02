@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>BLE</title>
+</head>
+
+<body>
+    <h1>BLE</h1>
+
+    <button id="startButton">开始搜索蓝牙设备</button>
+
+    <div>
+        <label for="deviceList">选择蓝牙设备:</label>
+        <select id="deviceList"></select>
+    </div>
+
+    <div>
+        <label for="messageInput">消息:</label>
+        <input type="text" id="messageInput" placeholder="输入消息">
+        <button id="sendMessageButton">发送消息</button>
+    </div>
+
+    <div id="log">
+        <p>日志:</p>
+    </div>
+
+    <script>
+        const startButton = document.getElementById('startButton');
+        const deviceList = document.getElementById('deviceList');
+        const messageInput = document.getElementById('messageInput');
+        const sendMessageButton = document.getElementById('sendMessageButton');
+        const log = document.getElementById('log');
+        let bluetoothDevice;
+        let gattServer;
+        let rxCharacteristic;
+
+        const SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb";
+        const RX_UUID = "0000fff1-0000-1000-8000-00805f9b34fb";
+        const TX_UUID = "0000fff2-0000-1000-8000-00805f9b34fb";
+        async function startBluetoothScan() {
+            try {
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [SERVICE_UUID]
+                });
+                bluetoothDevice = device;
+                updateDeviceList();
+                await connectDevice(device);
+            } catch (error) {
+                console.error('蓝牙搜索错误:', error);
+            }
+        }
+
+        async function connectDevice(device) {
+            try {
+                gattServer = await device.gatt.connect();
+                logMessage('蓝牙设备已连接');
+
+                const service = await gattServer.getPrimaryService(SERVICE_UUID);
+                const txCharacteristic = await service.getCharacteristic(TX_UUID);
+
+                // 启用通知
+                rxCharacteristic = await service.getCharacteristic(RX_UUID);
+                await rxCharacteristic.startNotifications();
+
+                sendMessageButton.addEventListener('click', async () => {
+                    const message = messageInput.value;
+                    try {
+                        await txCharacteristic.writeValue(new TextEncoder().encode(message));
+                        logMessage(`已发送消息: ${message}`);
+                    } catch (error) {
+                        console.error('发送消息错误:', error);
+                    }
+                });
+
+                // 添加通知监听器
+                rxCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                    const message = new TextDecoder().decode(event.target.value);
+                    logMessage(`收到消息: ${message}`);
+                });
+            } catch (error) {
+                console.error('连接蓝牙设备错误:', error);
+            }
+        }
+
+        function logMessage(message) {
+            const p = document.createElement('p');
+            p.textContent = message;
+            log.appendChild(p);
+        }
+
+        // 更新设备列表的函数
+        function updateDeviceList() {
+            const option = document.createElement('option');
+            option.value = bluetoothDevice.id;
+            option.textContent = bluetoothDevice.name || '未命名设备';
+            deviceList.appendChild(option);
+        }
+
+        startButton.addEventListener('click', startBluetoothScan);
+    </script>
+</body>
+
+</html>
