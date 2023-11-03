@@ -168,10 +168,10 @@ class E104_BT08(threading.Thread):
                             self.sendendtime = time.time()
                             self.issendreturn = True
                         else:
-                            self.write(b'\xff\xff\x00')
+                            self.write(b'\xff\xff\xf0')
                             threading.Thread(target=self.send_data, args=(0,)).start()
                     else:
-                        self.write(b'\xff\xff\x00')
+                        self.write(b'\xff\xff\xf0')
                         threading.Thread(target=self.send_data, args=(0,)).start()
                 elif data[0:2] == b'\xff\xff':
                     if data[2:3] == b'\x10':
@@ -215,7 +215,7 @@ class E104_BT08(threading.Thread):
                     # 接收收到发送响应
                     elif self.getflag and not self.getcontflag:
                         self.getcontflag = True
-                        if data == b'\xff\xff\x00':
+                        if data == b'\xff\xff\xf0':
                             with open(self.getfilename, "wb") as file:
                                 file.truncate(0)
                         elif data == b'\xff\xff\xff':
@@ -226,7 +226,8 @@ class E104_BT08(threading.Thread):
                                     if not endfiledata:
                                         break
                                     endgetdata.append(endfiledata)
-                            self.write(b'\xff\xff'+hex(self.sendlen)[2:].zfill(6).encode()+crc8_file(self.getfilename))
+                            self.write(
+                                b'\xff\xff' + hex(self.sendlen)[2:].zfill(6).encode() + crc8_file(self.getfilename))
                             self.getflag = False
                             self.getcontflag = False
                     elif self.getflag and self.getcontflag:
@@ -255,7 +256,7 @@ class E104_BT08(threading.Thread):
                             call(self, data)
             time.sleep(0.05)
             if self.issendreturn:
-                if time.time() - self.sendendtime >= 2*self.timeout:
+                if time.time() - self.sendendtime >= 2 * self.timeout:
                     self.sendflag = False
                     self.issendreturn = False
                     for call in self.sendendcallback:
@@ -375,7 +376,7 @@ class E104_BT08(threading.Thread):
 
     def add_state_callback(self, function):
         self.statecallback.append(function)
-    
+
     def add_sendend_callback(self, function):
         self.sendendcallback.append(function)
 
@@ -384,9 +385,10 @@ class E104_BT08(threading.Thread):
 
     def del_state_callback(self, function=None):
         self.statecallback.remove(function) if function else self.statecallback.pop()
-        
+
     def del_sendend_callback(self, function=None):
         self.sendendcallback.remove(function) if function else self.sendendcallback.pop()
+
     def set_uart(self, baudrate=115200, parity=AT_PARITY_NONE):
         self.ser.baudrate = baudrate
         self.ser.parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
