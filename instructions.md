@@ -101,9 +101,9 @@ def crc8(datas):
 
 ​		若相同则发送 `b'\xff\xff\x01'` ,从相应分卷开始发送分卷内容
 
-​		不相同发送 `b'\xff\xff\x00'`  ,从头开始发送分卷内容
+​		不相同发送 `b'\xff\xff\xf0'`  ,从头开始发送分卷内容
 
-​	3.发送 `b'\xff\xff\x00'`  ,从头开始发送分卷内容
+​	3.发送 `b'\xff\xff\xf0'`  ,从头开始发送分卷内容
 
 注:
 
@@ -197,7 +197,7 @@ while True:
 
 ​		分卷1(b'while True:\r\n    p')CRC值应为bb
 
-​		发送端:b'\xff\xff\x00'
+​		发送端:b'\xff\xff\xf0'
 
 ​		发送端建议延时
 
@@ -219,7 +219,7 @@ while True:
 
 接收端:b'\xff\xff00000000'
 
-发送端:b'\xff\xff\x00'
+发送端:b'\xff\xff\xf0'
 
 发送端建议延时
 
