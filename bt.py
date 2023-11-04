@@ -588,7 +588,10 @@ class E104_BT08(threading.Thread):
         self.sendlen = len(self.senddata)
         split = hex(self.sendlen)[2:].zfill(6).encode()
         send_data = b'\xff\xff' + save_file_name + split + self.sendcrc
-        self.write(send_data)
+        send_datas = [send_data[i:i + 20] for i in range(0, len(send_data), 20)]
+        for write_data in send_datas:
+            self.write(write_data)
+            time.sleep(0.01)
         self.sendflag = True
         return True
 
