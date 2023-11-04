@@ -205,7 +205,7 @@ class E104_BT08(threading.Thread):
                                 self.write(redata)
                             else:
                                 self.write(b'\xff\xff00000000')
-
+                            self.getdata = []
                         else:
                             self.write(b'\xff\xff00000000')
                     # 接收收到发送响应
