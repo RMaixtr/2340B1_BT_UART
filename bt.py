@@ -185,15 +185,11 @@ class E104_BT08(threading.Thread):
                     # 接收收到传输协议返回
                     elif not self.getflag and all(chr(byte).isalnum()
                                                   and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
-                        datas = data.split(b'\xff')
-                        for data in datas:
-                            if data != b'':
-                                break
                         self.getflag = True
                         self.getcrc = data[-2:]
                         self.getlen = int(data[-8:-2], 16)
-                        self.getfilename = data[:-8]
-                        if os.path.exists(str(self.getfilename.decode('utf-8'))):
+                        self.getfilename = data[2:-8]
+                        if os.path.exists(self.getfilename.decode('utf-8')):
                             with open(self.getfilename, 'rb') as file:
                                 while True:
                                     filedata = file.read(18)
@@ -591,7 +587,7 @@ class E104_BT08(threading.Thread):
                 self.senddata.append(filedata)
         self.sendlen = len(self.senddata)
         split = hex(self.sendlen)[2:].zfill(6).encode()
-        send_data = b'\xff\xff' + b'\xff' * (10 - len(save_file_name)) + save_file_name + split + self.sendcrc
+        send_data = b'\xff\xff' + save_file_name + split + self.sendcrc
         self.write(send_data)
         self.sendflag = True
         return True
