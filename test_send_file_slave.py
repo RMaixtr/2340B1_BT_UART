@@ -1,6 +1,5 @@
 from maix import camera, display, image
 from bt import e104_bt08
-import bt
 
 if __name__ == '__main__':
     # 蓝牙角色默认为从机,当两个蓝牙模块处于同一环境bondenable配置为disable且一个为主机一个为从机,会自动连接(此时通过UUID过滤)
