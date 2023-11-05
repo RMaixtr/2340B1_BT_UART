@@ -46,6 +46,7 @@ if __name__ == '__main__':
     e104_bt08.add_state_callback(bt08_state_callback)
     e104_bt08.add_data_callback(bt08_data_callback)
     unit_test_loop_change_id()
-    input("请连接蓝牙模块")
+    while not e104_bt08.is_connected():
+        time.sleep(1)
     unit_test_loop_write_read()
     e104_bt08.close()
