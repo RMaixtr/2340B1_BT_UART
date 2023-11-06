@@ -29,7 +29,7 @@ if __name__ == '__main__':
     e104_bt08.add_data_callback(bt08_data_callback)
     e104_bt08.add_sendend_callback(bt08_sendend_callback)
     # 主机要发送给从机的程序 example.py
-    with open('example.py', 'rb') as f:
+    with open('user_latest_code.py', 'rb') as f:
         example = f.read()
     print(example)
 
@@ -40,7 +40,7 @@ if __name__ == '__main__':
             state = 0
         elif state == 0:
             if e104_bt08.is_connected():
-                e104_bt08.send_file(b'example.py')
+                e104_bt08.send_file(b'user_latest_code.py')
                 state = 1
         elif state == 1:
             if e104_bt08.send_finish():
