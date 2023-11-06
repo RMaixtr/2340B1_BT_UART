@@ -50,6 +50,7 @@ class E104_BT08(threading.Thread):
         self.sendcrc = b''
         self.sendflag = False
         self.sendlen = 0
+        self.sendfilename = b''
         self.getflag = False
         self.getfilename = b''
         self.getlen = 0
@@ -110,7 +111,7 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                print(self.isatreturn, data)
+                # print(self.isatreturn, data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -182,6 +183,8 @@ class E104_BT08(threading.Thread):
                         self.stop_thread(self.runthread)
                     elif data[2:3] == b'\x1f':
                         self.runflag = False
+                        self.write(b'\xff\xff\x1f')
+                        sys.stdout = sys.__stdout__
                     # 接收收到传输协议返回
                     elif not self.getflag and all(chr(byte).isalnum()
                                                   and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
@@ -570,13 +573,19 @@ class E104_BT08(threading.Thread):
     def set_bondenable(self, para):
         return b'+OK\r\n' in self.__send_atdata(b'AT+BOND=' + para)
 
-    def send_file(self, file_path, save_file_name=b'bt_tmp.log'):
+    def send_file(self, file_path, save_file_name=b''):
         if self.sendflag:
             return False
         if not os.path.exists(file_path.decode('utf-8')):
             return False
-        if len(save_file_name) > 10:
+        if save_file_name == b'':
+            if len(file_path) < 33:
+                save_file_name = file_path
+            else:
+                save_file_name = b'bt_tmp.log'
+        elif len(save_file_name) > 32:
             save_file_name = b'bt_tmp.log'
+        self.sendfilename = save_file_name
         self.senddata = []
         self.sendcrc = crc8_file(file_path)
         with open(file_path, 'rb') as file:
@@ -625,12 +634,17 @@ class E104_BT08(threading.Thread):
         file.close()
         self.run_code(file_content)
 
-    def slave_run(self, file_path=b'bt_tmp.log'):
+    def slave_run(self, file_path=b''):
         if self.sendflag:
             return False
         if self.runflag:
             self.slave_stop()
             time.sleep(0.07)
+        if file_path == b'':
+            if self.sendfilename == b'':
+                return  False
+            else:
+                file_path = self.sendfilename
         self.runflag = True
         self.write(b'\xff\xff\x10' + file_path)
         return True
