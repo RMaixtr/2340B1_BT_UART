@@ -46,6 +46,7 @@
         const stopButton = document.getElementById('stopButton');
         const log = document.getElementById('log');
         const clearButton = document.getElementById('clear');
+        var sendflag = false;
         let bluetoothDevice;
         let gattServer;
         let rxCharacteristic;
@@ -91,7 +92,13 @@
 
                 runButton.addEventListener('click', async () => {
                     try {
-                        await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0x10]));
+                        const byteArray = new TextEncoder().encode(fileInput.value);
+                        const arraysToMerge = [
+                            new Uint8Array([0xFF, 0xFF, 0x10]),
+                            byteArray,
+                        ];
+                        await txCharacteristic.writeValue(mergeUint8Arrays(arraysToMerge));
+                        console.log(mergeUint8Arrays(arraysToMerge))
                         logMessage(`已发送消息: FFFF10`);
                     } catch (error) {
                         console.error('发送消息错误:', error);
@@ -125,6 +132,7 @@
                     const sendMessage = mergeUint8Arrays(arraysToMerge);
                     try {
                         await txCharacteristic.writeValue(sendMessage);
+                        sendflag = true;
                         // logMessage(`已发送消息: ${textEncoder.decode(sendMessage)}`);
                     } catch (error) {
                         console.error('发送消息错误:', error);
@@ -132,10 +140,40 @@
                 });
 
                 // 添加通知监听器
-                rxCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                rxCharacteristic.addEventListener('characteristicvaluechanged', async (event) => {
                     const message = new TextDecoder().decode(event.target.value);
+                    const uint8ArrayData = new Uint8Array(event.target.value.buffer);
+                    const text = inputText.value;
+                    const byteArray = new TextEncoder().encode(text);
+                    const splitArray = splitUint8Array(byteArray, 18);
+
+                    if (sendflag) {
+                        if (uint8ArrayData[0] === 0xFF && uint8ArrayData[1] === 0xFF) {
+                            try {
+                                sendflag = false;
+                                await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xF0]));
+                                await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
+                                for (let index = 0; index < splitArray.length; index++) {
+                                    const uint8Array = splitArray[index];
+                                    const modifiedUint8Array = prependStartMarker(uint8Array);
+                                    try {
+                                        await txCharacteristic.writeValue(modifiedUint8Array);
+                                    } catch (error) {
+                                        console.error('发送消息错误:', error);
+                                    }
+                                }
+                                await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
+                                await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
+                            } catch (error) {
+                                console.error('发送消息错误:', error);
+                            }
+                        }
+                    }
+
                     logMessage(`收到消息: ${message}`);
                 });
+
+
             } catch (error) {
                 console.error('连接蓝牙设备错误:', error);
             }
@@ -199,6 +237,11 @@
             const paddedString = inputString.padStart(6, '0');
             const uint8Array = new TextEncoder().encode(paddedString);
             return uint8Array;
+        }
+
+        function prependStartMarker(uint8Array) {
+            const startMarker = new Uint8Array([0xFF, 0xFF]);
+            return new Uint8Array([...startMarker, ...uint8Array]);
         }
 
         // 更新设备列表的函数
