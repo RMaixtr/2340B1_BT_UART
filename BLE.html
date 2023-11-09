@@ -152,8 +152,6 @@
                         if (uint8ArrayData[0] === 0xFF && uint8ArrayData[1] === 0xFF) {
                             try {
                                 let split = parseInt(new TextDecoder().decode(uint8ArrayData.slice(2, 8)), 16)
-                                let crc = uint8ArrayData.slice(8, 10)
-                                console.log(splitArray[split - 1])
                                 let split_crc = calculateCRC8(splitArray[split - 1])
                                 console.log(split_crc)
                                 sendflag = false;
