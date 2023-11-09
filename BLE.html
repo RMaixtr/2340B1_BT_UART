@@ -46,6 +46,7 @@
         const stopButton = document.getElementById('stopButton');
         const log = document.getElementById('log');
         const clearButton = document.getElementById('clear');
+        const test = document.getElementById('test')
         var sendflag = false;
         let bluetoothDevice;
         let gattServer;
@@ -145,25 +146,49 @@
                     const uint8ArrayData = new Uint8Array(event.target.value.buffer);
                     const text = inputText.value;
                     const byteArray = new TextEncoder().encode(text);
+                    const crc8 = calculateCRC8(byteArray);
                     const splitArray = splitUint8Array(byteArray, 18);
 
                     if (sendflag) {
                         if (uint8ArrayData[0] === 0xFF && uint8ArrayData[1] === 0xFF) {
                             try {
+                                let split = parseInt(new TextDecoder().decode(uint8ArrayData.slice(2, 8)), 16)
+                                let crc = uint8ArrayData.slice(8, 10)
+                                console.log(splitArray[split - 1])
+                                let split_crc = calculateCRC8(splitArray[split - 1])
+                                console.log(split_crc)
                                 sendflag = false;
-                                await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xF0]));
-                                await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
-                                for (let index = 0; index < splitArray.length; index++) {
-                                    const uint8Array = splitArray[index];
-                                    const modifiedUint8Array = prependStartMarker(uint8Array);
-                                    try {
-                                        await txCharacteristic.writeValue(modifiedUint8Array);
-                                    } catch (error) {
-                                        console.error('发送消息错误:', error);
+                                if (split == splitArray.length && crc.every((val, index) => val === new TextEncoder().encode(crc8)[index])) {
+                                    await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
+                                } else if (split < splitArray.length && crc.every((val, index) => val === new TextEncoder().encode(calculateCRC8(splitArray[split - 1]))[index])) {
+                                    await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0x01]));
+                                    await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
+                                    for (let index = split; index < splitArray.length; index++) {
+                                        const uint8Array = splitArray[index];
+                                        const modifiedUint8Array = prependStartMarker(uint8Array);
+                                        try {
+                                            await txCharacteristic.writeValue(modifiedUint8Array);
+                                        } catch (error) {
+                                            console.error('发送消息错误:', error);
+                                        }
                                     }
+                                    await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
+                                    await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
+                                } else {
+                                    await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xF0]));
+                                    await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
+                                    for (let index = 0; index < splitArray.length; index++) {
+                                        const uint8Array = splitArray[index];
+                                        const modifiedUint8Array = prependStartMarker(uint8Array);
+                                        try {
+                                            await txCharacteristic.writeValue(modifiedUint8Array);
+                                        } catch (error) {
+                                            console.error('发送消息错误:', error);
+                                        }
+                                    }
+                                    await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
+                                    await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
                                 }
-                                await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
-                                await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
                             } catch (error) {
                                 console.error('发送消息错误:', error);
                             }
