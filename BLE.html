@@ -143,21 +143,18 @@
                 rxCharacteristic.addEventListener('characteristicvaluechanged', async (event) => {
                     const message = new TextDecoder().decode(event.target.value);
                     const uint8ArrayData = new Uint8Array(event.target.value.buffer);
-                    const text = inputText.value;
-                    const byteArray = new TextEncoder().encode(text);
-                    const crc8 = calculateCRC8(byteArray);
-                    const splitArray = splitUint8Array(byteArray, 18);
-
                     if (sendflag) {
                         if (uint8ArrayData[0] === 0xFF && uint8ArrayData[1] === 0xFF) {
                             try {
-                                let split = parseInt(new TextDecoder().decode(uint8ArrayData.slice(2, 8)), 16)
-                                let split_crc = calculateCRC8(splitArray[split - 1])
-                                console.log(split_crc)
+                                const byteArray = new TextEncoder().encode(inputText.value);
+                                const crc8 = calculateCRC8(byteArray);
+                                const splitArray = splitUint8Array(byteArray, 18);
+                                let split = parseInt(new TextDecoder().decode(uint8ArrayData.slice(2, 8)), 16);
+                                let crc = uint8ArrayData.slice(8, 10)
                                 sendflag = false;
                                 if (split == splitArray.length && crc.every((val, index) => val === new TextEncoder().encode(crc8)[index])) {
                                     await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
-                                } else if (split < splitArray.length && crc.every((val, index) => val === new TextEncoder().encode(calculateCRC8(splitArray[split - 1]))[index])) {
+                                } else if (split < splitArray.length && split != 0 && crc.every((val, index) => val === new TextEncoder().encode(calculateCRC8(splitArray[split - 1]))[index])) {
                                     await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0x01]));
                                     await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
                                     for (let index = split; index < splitArray.length; index++) {
@@ -229,7 +226,7 @@
                 }
             }
 
-            return (crc & 0xFF).toString(16);
+            return (crc & 0xFF).toString(16).padStart(2, '0');
         }
 
         function splitUint8Array(uint8Array, chunkSize) {
