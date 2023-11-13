@@ -616,13 +616,14 @@ class E104_BT08(threading.Thread):
 
     def run_code(self, code):
         sys.stdout = self
-        # try:
-        if self.hostglobals:
-            exec(code, {**globals(), **self.hostglobals}, locals())
-        else:
-            exec(code, globals(), locals())
-        # except Exception as e:
-        # self.write(str(e))
+        try:
+            if self.hostglobals:
+                exec(code, {**globals(), **self.hostglobals}, locals())
+            else:
+                exec(code, globals(), locals())
+        except Exception as e:
+            self.write(str(e))
+            time.sleep(1)
         # self.restore()
         self.write(b'\xff\xff\x1f')
         sys.stdout = sys.__stdout__
