@@ -30,6 +30,8 @@
         <button id="stopButton">停止</button>
     </div>
 
+    <h3 id="state">运行状态：假</h3>
+
     <div id="log">
         <span>日志:</span><button id="clear">清空</button>
     </div>
@@ -40,10 +42,11 @@
         const messageInput = document.getElementById('messageInput');
         const sendMessageButton = document.getElementById('sendMessageButton');
         const inputText = document.getElementById('inputText');
-        const fileInput = document.getElementById('fileInput')
+        const fileInput = document.getElementById('fileInput');
         const transmitButton = document.getElementById('transmitButton');
         const runButton = document.getElementById('runButton');
         const stopButton = document.getElementById('stopButton');
+        const state = document.getElementById('state');
         const log = document.getElementById('log');
         const clearButton = document.getElementById('clear');
         var sendflag = false;
@@ -92,6 +95,7 @@
 
                 runButton.addEventListener('click', async () => {
                     try {
+                        state.textContent = '运行状态：真'
                         const byteArray = new TextEncoder().encode(fileInput.value);
                         const arraysToMerge = [
                             new Uint8Array([0xFF, 0xFF, 0x10]),
@@ -143,8 +147,12 @@
                 rxCharacteristic.addEventListener('characteristicvaluechanged', async (event) => {
                     const message = new TextDecoder().decode(event.target.value);
                     const uint8ArrayData = new Uint8Array(event.target.value.buffer);
-                    if (sendflag) {
-                        if (uint8ArrayData[0] === 0xFF && uint8ArrayData[1] === 0xFF) {
+                    if (containsArray(new Uint8Array([0xFF, 0xFF, 0x1F]),uint8ArrayData)) {
+                            state.textContent = '运行状态：假'
+                        }
+                    if (uint8ArrayData[0] === 0xFF && uint8ArrayData[1] === 0xFF) {
+                        console.log(uint8ArrayData);
+                        if (sendflag) {
                             try {
                                 const byteArray = new TextEncoder().encode(inputText.value);
                                 const crc8 = calculateCRC8(byteArray);
@@ -188,6 +196,7 @@
                             }
                         }
                     }
+
 
                     logMessage(`收到消息: ${message}`);
                 });
@@ -250,6 +259,21 @@
             return mergedArray;
         }
 
+        function containsArray(target, source) {
+            for (var i = 0; i <= source.length - target.length; i++) {
+                var match = true;
+                for (var j = 0; j < target.length; j++) {
+                    if (target[j] !== source[i + j]) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) {
+                    return true;
+                }
+            }
+            return false;
+        }
 
         function stringToPaddedUint8Array(inputString) {
 
