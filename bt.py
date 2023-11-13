@@ -9,6 +9,7 @@ import sys
 import os
 import inspect
 import ctypes
+import traceback
 
 # from maix import camera, display, image # 在模块中导入运行文本文件所需的模块,或于主代码处导入模块,使用set_globals导入主代码globals
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
@@ -181,10 +182,10 @@ class E104_BT08(threading.Thread):
                         self.runthread.start()
                     elif data[2:3] == b'\x11':
                         self.stop_thread(self.runthread)
-                    elif data[2:3] == b'\x1f':
-                        self.runflag = False
                         self.write(b'\xff\xff\x1f')
                         sys.stdout = sys.__stdout__
+                    elif data[2:3] == b'\x1f':
+                        self.runflag = False
                     # 接收收到传输协议返回
                     elif not self.getflag and all(chr(byte).isalnum()
                                                   and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
@@ -622,7 +623,15 @@ class E104_BT08(threading.Thread):
             else:
                 exec(code, globals(), locals())
         except Exception as e:
-            self.write(str(e))
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            trace = traceback.extract_tb(exc_traceback)
+            _, lineno, _, _ = trace[-1]
+            traceback_details = {
+                'lineno': lineno,
+                'type': exc_type.__name__,
+                'message': str(exc_value),
+            }
+            self.write(str(traceback_details))
             time.sleep(1)
         # self.restore()
         self.write(b'\xff\xff\x1f')
