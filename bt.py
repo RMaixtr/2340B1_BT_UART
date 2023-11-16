@@ -255,6 +255,9 @@ class E104_BT08(threading.Thread):
                         for call in self.datacallback:
                             call(self, data)
             time.sleep(0.05)
+            if self.getflag and not self.is_connected():
+                self.getflag = False
+                self.getcontflag = False
             if self.issendreturn:
                 if time.time() - self.sendendtime >= 2 * self.timeout:
                     self.sendflag = False
@@ -608,6 +611,13 @@ class E104_BT08(threading.Thread):
     def send_data(self, split):
         time.sleep(1)
         while self.sendlen != split:
+            if self.get_state() == AT_STATE_DISCONNECT:
+                self.sendflag = False
+                self.issendreturn = False
+                for call in self.sendendcallback:
+                    call(self, False)
+                print("End")
+                return None
             self.write(b'\xff\xff' + self.senddata[split])
             time.sleep(0.07)
             split += 1
