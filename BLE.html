@@ -125,7 +125,7 @@
                     const byteArray = textEncoder.encode(text);
                     // 计算CRC8
                     const crc8 = calculateCRC8(byteArray);
-                    const splitArray = splitUint8Array(byteArray, 18);
+                    const splitArray = splitUint8Array(byteArray, 38);
                     const prefix = new Uint8Array([0xFF, 0xFF]);
                     const arraysToMerge = [
                         prefix,
@@ -156,7 +156,7 @@
                             try {
                                 const byteArray = new TextEncoder().encode(inputText.value);
                                 const crc8 = calculateCRC8(byteArray);
-                                const splitArray = splitUint8Array(byteArray, 18);
+                                const splitArray = splitUint8Array(byteArray, 38);
                                 let split = parseInt(new TextDecoder().decode(uint8ArrayData.slice(2, 8)), 16);
                                 let crc = uint8ArrayData.slice(8, 10)
                                 sendflag = false;
