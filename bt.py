@@ -196,7 +196,7 @@ class E104_BT08(threading.Thread):
                         if os.path.exists(self.getfilename.decode('utf-8')):
                             with open(self.getfilename, 'rb') as file:
                                 while True:
-                                    filedata = file.read(18)
+                                    filedata = file.read(38)
                                     if not filedata:
                                         break
                                     self.getdata.append(filedata)
@@ -222,7 +222,7 @@ class E104_BT08(threading.Thread):
                             endgetdata = []
                             with open(self.getfilename, 'rb') as file:
                                 while True:
-                                    endfiledata = file.read(18)
+                                    endfiledata = file.read(38)
                                     if not endfiledata:
                                         break
                                     endgetdata.append(endfiledata)
@@ -235,7 +235,7 @@ class E104_BT08(threading.Thread):
                             endgetdata = []
                             with open(self.getfilename, 'rb') as file:
                                 while True:
-                                    endfiledata = file.read(18)
+                                    endfiledata = file.read(38)
                                     if not endfiledata:
                                         break
                                     endgetdata.append(endfiledata)
@@ -594,7 +594,7 @@ class E104_BT08(threading.Thread):
         self.sendcrc = crc8_file(file_path)
         with open(file_path, 'rb') as file:
             while True:
-                filedata = file.read(18)
+                filedata = file.read(38)
                 if not filedata:
                     break
                 self.senddata.append(filedata)
@@ -621,8 +621,9 @@ class E104_BT08(threading.Thread):
             self.write(b'\xff\xff' + self.senddata[split])
             time.sleep(0.07)
             split += 1
-        self.issendreturn = True
+        time.sleep(0.07)
         self.write(b'\xff\xff\xff')
+        self.issendreturn = True
         self.sendendtime = time.time()
 
     def run_code(self, code):
