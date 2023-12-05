@@ -74,6 +74,7 @@ class E104_BT08(threading.Thread):
         self.ser.close()
 
     def write(self, data):
+        print(data)
         if type(data) == bytes:
             self.ser.write(data)
         else:
@@ -86,7 +87,7 @@ class E104_BT08(threading.Thread):
         self.state = AT_STATE_DISCONNECT
         self.timeout = timeout
         selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
-        self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=selected_parity)
+        self.ser = serial.Serial("COM3", baudrate=baudrate, parity=selected_parity)
         self.start()
         while True:
             try:
@@ -112,7 +113,7 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                # print(self.isatreturn, data)
+                print(isstatedata,data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -196,7 +197,7 @@ class E104_BT08(threading.Thread):
                         if os.path.exists(self.getfilename.decode('utf-8')):
                             with open(self.getfilename, 'rb') as file:
                                 while True:
-                                    filedata = file.read(38)
+                                    filedata = file.read(48)
                                     if not filedata:
                                         break
                                     self.getdata.append(filedata)
@@ -204,7 +205,7 @@ class E104_BT08(threading.Thread):
                                 self.write(b'\xff\xff' + data[-8:])
                             elif self.getlen > len(self.getdata):
                                 redata = b'\xff\xff' + hex(len(self.getdata))[2:].zfill(6).encode() \
-                                         + hex(crc8(self.getdata[-1]))[2:].zfill(2).encode()
+                                         + hex(crc8(self.getdata[self.getlen-1]))[2:].zfill(2).encode()
 
                                 self.write(redata)
                             else:
@@ -222,7 +223,7 @@ class E104_BT08(threading.Thread):
                             endgetdata = []
                             with open(self.getfilename, 'rb') as file:
                                 while True:
-                                    endfiledata = file.read(38)
+                                    endfiledata = file.read(48)
                                     if not endfiledata:
                                         break
                                     endgetdata.append(endfiledata)
@@ -235,7 +236,7 @@ class E104_BT08(threading.Thread):
                             endgetdata = []
                             with open(self.getfilename, 'rb') as file:
                                 while True:
-                                    endfiledata = file.read(38)
+                                    endfiledata = file.read(48)
                                     if not endfiledata:
                                         break
                                     endgetdata.append(endfiledata)
@@ -594,7 +595,7 @@ class E104_BT08(threading.Thread):
         self.sendcrc = crc8_file(file_path)
         with open(file_path, 'rb') as file:
             while True:
-                filedata = file.read(38)
+                filedata = file.read(48)
                 if not filedata:
                     break
                 self.senddata.append(filedata)
@@ -616,12 +617,12 @@ class E104_BT08(threading.Thread):
                 self.issendreturn = False
                 for call in self.sendendcallback:
                     call(self, False)
-                print("End")
+
                 return None
             self.write(b'\xff\xff' + self.senddata[split])
             time.sleep(0.07)
             split += 1
-        time.sleep(0.07)
+        time.sleep(0.1)
         self.write(b'\xff\xff\xff')
         self.issendreturn = True
         self.sendendtime = time.time()
