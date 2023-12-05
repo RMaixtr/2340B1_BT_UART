@@ -10,9 +10,8 @@ import os
 import inspect
 import ctypes
 import traceback
-from maix import *
 
-# from maix import camera, display, image # 在模块中导入运行文本文件所需的模块,或于主代码处导入模块,使用set_globals导入主代码globals
+
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
     b'\r\n STA:connect', b'\r\n disconnect', b'\r\n STA:wakeup', b'\r\n STA:sleep'
 AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19200, b'6': 28800,
@@ -60,7 +59,6 @@ class E104_BT08(threading.Thread):
         self.getdata = []
         self.getcontflag = False
         self.runthread = None
-        self.hostglobals = None
         self.hostrunflag = False
         self.slaverunflag = False
         self.connectdelayflag = False
@@ -80,9 +78,6 @@ class E104_BT08(threading.Thread):
             self.ser.write(data)
         else:
             self.ser.write(data.encode())
-
-    def set_globals(self, _globals):
-        self.hostglobals = _globals
 
     def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1):
         self.state = AT_STATE_DISCONNECT
@@ -114,7 +109,7 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                # print(self.isatreturn, data)
+                #print(self.isatreturn, data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -183,6 +178,10 @@ class E104_BT08(threading.Thread):
                         if not self.slaverunflag:
                             self.runthread = threading.Thread(target=self.run_file, args=(runfile,))
                             self.slaverunflag = True
+                            self.runthread.start()
+                        else:
+                            self.stop_thread(self.runthread)
+                            self.runthread = threading.Thread(target=self.run_file, args=(runfile,))
                             self.runthread.start()
                     elif data[2:3] == b'\x11':
                         if self.slaverunflag:
@@ -634,10 +633,7 @@ class E104_BT08(threading.Thread):
     def run_code(self, code):
         sys.stdout = self
         try:
-            if self.hostglobals:
-                exec(code, {**globals(), **self.hostglobals}, locals())
-            else:
-                exec(code, globals(), locals())
+            exec(code, globals(), globals())
         except Exception as e:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             trace = traceback.extract_tb(exc_traceback)
@@ -651,6 +647,7 @@ class E104_BT08(threading.Thread):
             time.sleep(1)
         # self.restore()
         self.write(b'\xff\xff\x1f')
+        self.slaverunflag = False
         sys.stdout = sys.__stdout__
 
     def run_file(self, file_path):
