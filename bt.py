@@ -10,6 +10,7 @@ import os
 import inspect
 import ctypes
 import traceback
+from maix import *
 
 # from maix import camera, display, image # 在模块中导入运行文本文件所需的模块,或于主代码处导入模块,使用set_globals导入主代码globals
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
@@ -60,7 +61,8 @@ class E104_BT08(threading.Thread):
         self.getcontflag = False
         self.runthread = None
         self.hostglobals = None
-        self.runflag = False
+        self.hostrunflag = False
+        self.slaverunflag = False
         self.connectdelayflag = False
         self.connectdelaytime = 0
         self.init()
@@ -112,6 +114,7 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
+                # print(self.isatreturn, data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -177,14 +180,18 @@ class E104_BT08(threading.Thread):
                 elif data[0:2] == b'\xff\xff':
                     if data[2:3] == b'\x10':
                         runfile = data[3:]
-                        self.runthread = threading.Thread(target=self.run_file, args=(runfile,))
-                        self.runthread.start()
+                        if not self.slaverunflag:
+                            self.runthread = threading.Thread(target=self.run_file, args=(runfile,))
+                            self.slaverunflag = True
+                            self.runthread.start()
                     elif data[2:3] == b'\x11':
-                        self.stop_thread(self.runthread)
+                        if self.slaverunflag:
+                            self.stop_thread(self.runthread)
+                            self.slaverunflag = False
                         self.write(b'\xff\xff\x1f')
                         sys.stdout = sys.__stdout__
                     elif data[2:3] == b'\x1f':
-                        self.runflag = False
+                        self.hostrunflag = False
                     # 接收收到传输协议返回
                     elif not self.getflag and all(chr(byte).isalnum()
                                                   and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
@@ -201,7 +208,7 @@ class E104_BT08(threading.Thread):
                                     self.getdata.append(filedata)
                             if self.getlen == len(self.getdata) and self.getcrc == crc8_file(self.getfilename):
                                 self.write(b'\xff\xff' + data[-8:])
-                            elif self.getlen > len(self.getdata) and len(self.getdata) > 0:
+                            elif self.getlen > len(self.getdata) > 0:
                                 redata = b'\xff\xff' + hex(len(self.getdata))[2:].zfill(6).encode() \
                                          + hex(crc8(self.getdata[len(self.getdata)-1]))[2:].zfill(2).encode()
 
@@ -656,7 +663,7 @@ class E104_BT08(threading.Thread):
     def slave_run(self, file_path=b''):
         if self.sendflag:
             return False
-        if self.runflag:
+        if self.hostrunflag:
             self.slave_stop()
             time.sleep(0.07)
         if file_path == b'':
@@ -664,13 +671,13 @@ class E104_BT08(threading.Thread):
                 return  False
             else:
                 file_path = self.sendfilename
-        self.runflag = True
+        self.hostrunflag = True
         self.write(b'\xff\xff\x10' + file_path)
         return True
 
     def slave_stop(self):
-        if self.runflag:
-            self.runflag = False
+        if self.hostrunflag:
+            self.hostrunflag = False
             self.write(b'\xff\xff\x11')
             return True
         return False
