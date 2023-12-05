@@ -112,7 +112,7 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                # print(self.isatreturn, data)
+                print(self.isatreturn, data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -202,7 +202,7 @@ class E104_BT08(threading.Thread):
                                     self.getdata.append(filedata)
                             if self.getlen == len(self.getdata) and self.getcrc == crc8_file(self.getfilename):
                                 self.write(b'\xff\xff' + data[-8:])
-                            elif self.getlen > len(self.getdata) and self.getlen > 0:
+                            elif self.getlen > len(self.getdata) and len(self.getdata) > 0:
                                 redata = b'\xff\xff' + hex(len(self.getdata))[2:].zfill(6).encode() \
                                          + hex(crc8(self.getdata[len(self.getdata)-1]))[2:].zfill(2).encode()
 
