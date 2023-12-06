@@ -95,7 +95,7 @@
 
                 runButton.addEventListener('click', async () => {
                     try {
-                        state.textContent = '运行状态：真'
+                        state.textContent = '运行状态：真';
                         const byteArray = new TextEncoder().encode(fileInput.value);
                         const arraysToMerge = [
                             new Uint8Array([0xFF, 0xFF, 0x10]),
@@ -104,6 +104,7 @@
                         await txCharacteristic.writeValue(mergeUint8Arrays(arraysToMerge));
                         console.log(mergeUint8Arrays(arraysToMerge))
                         logMessage(`已发送消息: FFFF10`);
+
                     } catch (error) {
                         console.error('发送消息错误:', error);
                     }
@@ -111,8 +112,12 @@
 
                 stopButton.addEventListener('click', async () => {
                     try {
-                        await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0x11]));
-                        logMessage(`已发送消息: FFFF11`);
+                        if (state.textContent === '运行状态：真') {
+                            await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0x11]));
+                            logMessage(`已发送消息: FFFF11`);
+                        } else {
+                            logMessage(`已暂停不需要再次暂停`);
+                        }
                     } catch (error) {
                         console.error('发送消息错误:', error);
                     }
@@ -147,9 +152,9 @@
                 rxCharacteristic.addEventListener('characteristicvaluechanged', async (event) => {
                     const message = new TextDecoder().decode(event.target.value);
                     const uint8ArrayData = new Uint8Array(event.target.value.buffer);
-                    if (containsArray(new Uint8Array([0xFF, 0xFF, 0x1F]),uint8ArrayData)) {
-                            state.textContent = '运行状态：假'
-                        }
+                    if (containsArray(new Uint8Array([0xFF, 0xFF, 0x1F]), uint8ArrayData)) {
+                        state.textContent = '运行状态：假'
+                    }
                     if (uint8ArrayData[0] === 0xFF && uint8ArrayData[1] === 0xFF) {
                         console.log(uint8ArrayData);
                         if (sendflag) {
