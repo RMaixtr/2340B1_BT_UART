@@ -11,7 +11,6 @@ import inspect
 import ctypes
 import traceback
 
-
 AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
     b'\r\n STA:connect', b'\r\n disconnect', b'\r\n STA:wakeup', b'\r\n STA:sleep'
 AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19200, b'6': 28800,
@@ -57,6 +56,7 @@ class E104_BT08(threading.Thread):
         self.getlen = 0
         self.getcrc = b''
         self.getdata = []
+        self.getcont = 0
         self.getcontflag = False
         self.runthread = None
         self.hostrunflag = False
@@ -79,7 +79,7 @@ class E104_BT08(threading.Thread):
         else:
             self.ser.write(data.encode())
 
-    def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1):
+    def init(self, baudrate=57600, parity=AT_PARITY_NONE, timeout=1):
         self.state = AT_STATE_DISCONNECT
         self.timeout = timeout
         selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
@@ -87,8 +87,14 @@ class E104_BT08(threading.Thread):
         self.start()
         while True:
             try:
-                self.__send_data(b'+++')
-                self.__send_atdata(b'AT+RESET')
+                if b'mode' not in self.__send_data(b'+++'):
+                    self.set_uart()
+                    try:
+                        self.set_baudrate(57600)
+                    except Exception as e:
+                        self.set_baudrate(57600)
+                else:
+                    self.__send_atdata(b'AT+RESET')
                 break
             except Exception as e:
                 if str(e) == AT_ERR[b'4']:
@@ -101,7 +107,6 @@ class E104_BT08(threading.Thread):
             time.sleep(0.1)
             if time.time() - start_time >= self.timeout:
                 raise TimeoutError("等待蓝牙重启超时")
-        # self.set_baudrate(1000000)
 
     def run(self):
         while self.loopflag:
@@ -109,7 +114,6 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                #print(self.isatreturn, data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -164,8 +168,10 @@ class E104_BT08(threading.Thread):
                             threading.Thread(target=self.send_data, args=(split,)).start()
                         elif split == self.sendlen and self.sendcrc == crc:
                             self.write(b'\xff\xff\xff')
-                            self.sendendtime = time.time()
-                            self.issendreturn = True
+                            self.sendflag = False
+                            self.issendreturn = False
+                            for call in self.sendendcallback:
+                                call(self, True)
                         else:
                             self.write(b'\xff\xff\xf0')
                             threading.Thread(target=self.send_data, args=(0,)).start()
@@ -192,16 +198,17 @@ class E104_BT08(threading.Thread):
                     elif data[2:3] == b'\x1f':
                         self.hostrunflag = False
                     # 接收收到传输协议返回
-                    elif not self.getflag and all(chr(byte).isalnum()
-                                                  and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
+                    elif not self.getflag and len(data) > 10 and all(chr(byte).isalnum()
+                                        and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
                         self.getflag = True
                         self.getcrc = data[-2:]
                         self.getlen = int(data[-8:-2], 16)
                         self.getfilename = data[2:-8]
+                        self.getcont = 0
                         if os.path.exists(self.getfilename.decode('utf-8')):
                             with open(self.getfilename, 'rb') as file:
                                 while True:
-                                    filedata = file.read(38)
+                                    filedata = file.read(40)
                                     if not filedata:
                                         break
                                     self.getdata.append(filedata)
@@ -209,14 +216,16 @@ class E104_BT08(threading.Thread):
                                 self.write(b'\xff\xff' + data[-8:])
                             elif self.getlen > len(self.getdata) > 0:
                                 redata = b'\xff\xff' + hex(len(self.getdata))[2:].zfill(6).encode() \
-                                         + hex(crc8(self.getdata[len(self.getdata)-1]))[2:].zfill(2).encode()
-
+                                         + hex(crc8(self.getdata[len(self.getdata) - 1]))[2:].zfill(2).encode()
                                 self.write(redata)
+                                self.getcont = len(self.getdata)
                             else:
                                 self.write(b'\xff\xff00000000')
+                                self.getcont = 0
                             self.getdata = []
                         else:
                             self.write(b'\xff\xff00000000')
+                            self.getcont = 0
                     # 接收收到发送响应
                     elif self.getflag and not self.getcontflag:
                         self.getcontflag = True
@@ -224,36 +233,23 @@ class E104_BT08(threading.Thread):
                             with open(self.getfilename, "wb") as file:
                                 file.truncate(0)
                         elif data == b'\xff\xff\xff':
-                            endgetdata = []
-                            with open(self.getfilename, 'rb') as file:
-                                while True:
-                                    endfiledata = file.read(38)
-                                    if not endfiledata:
-                                        break
-                                    endgetdata.append(endfiledata)
-                            self.write(
-                                b'\xff\xff' + hex(len(endgetdata))[2:].zfill(6).encode() + crc8_file(self.getfilename))
                             self.getflag = False
                             self.getcontflag = False
-                    elif self.getflag and self.getcontflag:
-                        if data == b'\xff\xff\xff':
-                            endgetdata = []
-                            with open(self.getfilename, 'rb') as file:
-                                while True:
-                                    endfiledata = file.read(38)
-                                    if not endfiledata:
-                                        break
-                                    endgetdata.append(endfiledata)
-                            self.write(
-                                b'\xff\xff' + hex(len(endgetdata))[2:].zfill(6).encode() + crc8_file(self.getfilename))
-                            self.getflag = False
-                            self.getcontflag = False
-                        elif b'\xff\xff' in data:
-                            savedatas = data.split(b'\xff\xff')
-                            for savedata in savedatas:
-                                if savedata != b'':
-                                    with open(self.getfilename, "ab") as file:
-                                        file.write(savedata)
+                            self.getcont = 0
+                    elif data == b'\xff\xff\xff':
+                        self.getflag = False
+                        self.getcontflag = False
+                        self.getcont = 0
+                elif self.getflag and self.getcontflag:
+                    self.getcont += (len(data) - 1) // 40 + 1
+                    with open(self.getfilename, "ab") as file:
+                        file.write(data)
+                    if self.getcont == self.getlen:
+                        self.getflag = False
+                        self.getcontflag = False
+                        self.write(
+                            b'\xff\xff' + hex(self.getcont)[2:].zfill(6).encode() + crc8_file(self.getfilename))
+                        self.getcont = 0
                 else:
                     self.f.write(data)
                     if self.datacallback:
@@ -265,6 +261,7 @@ class E104_BT08(threading.Thread):
                 self.getcontflag = False
             if self.issendreturn:
                 if time.time() - self.sendendtime >= 2 * self.timeout:
+                    self.write(b'\xff\xff\xff')
                     self.sendflag = False
                     self.issendreturn = False
                     for call in self.sendendcallback:
@@ -427,6 +424,8 @@ class E104_BT08(threading.Thread):
         for key, val in AT_BAUD.items():
             if val == baudrate:
                 data = b'+OK\r\n' in self.__send_atdata(b'AT+BAUD=' + key)
+                time.sleep(1)
+                self.reset()
                 self.ser.baudrate = baudrate
                 return data
         return False
@@ -599,17 +598,14 @@ class E104_BT08(threading.Thread):
         self.sendcrc = crc8_file(file_path)
         with open(file_path, 'rb') as file:
             while True:
-                filedata = file.read(38)
+                filedata = file.read(40)
                 if not filedata:
                     break
                 self.senddata.append(filedata)
         self.sendlen = len(self.senddata)
         split = hex(self.sendlen)[2:].zfill(6).encode()
         send_data = b'\xff\xff' + save_file_name + split + self.sendcrc
-        send_datas = [send_data[i:i + 20] for i in range(0, len(send_data), 20)]
-        for write_data in send_datas:
-            self.write(write_data)
-            time.sleep(0.01)
+        self.write(send_data)
         self.sendflag = True
         return True
 
@@ -622,11 +618,11 @@ class E104_BT08(threading.Thread):
                 for call in self.sendendcallback:
                     call(self, False)
                 return None
-            self.write(b'\xff\xff' + self.senddata[split])
-            time.sleep(0.07)
+            self.write(self.senddata[split])
+            if self.sendlen == split + 1:
+                break
+            time.sleep(0.065)
             split += 1
-        time.sleep(0.07)
-        self.write(b'\xff\xff\xff')
         self.issendreturn = True
         self.sendendtime = time.time()
 
@@ -665,7 +661,7 @@ class E104_BT08(threading.Thread):
             time.sleep(0.07)
         if file_path == b'':
             if self.sendfilename == b'':
-                return  False
+                return False
             else:
                 file_path = self.sendfilename
         self.hostrunflag = True
