@@ -51,10 +51,10 @@
         const log = document.getElementById('log');
         const clearButton = document.getElementById('clear');
         var sendflag = false;
+        var noreturn = true;
         let bluetoothDevice;
         let gattServer;
         let rxCharacteristic;
-
         const SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb";
         const RX_UUID = "0000fff1-0000-1000-8000-00805f9b34fb";
         const TX_UUID = "0000fff2-0000-1000-8000-00805f9b34fb";
@@ -146,7 +146,7 @@
                     const byteArray = textEncoder.encode(text);
                     // 计算CRC8
                     const crc8 = calculateCRC8(byteArray);
-                    const splitArray = splitUint8Array(byteArray, 38);
+                    const splitArray = splitUint8Array(byteArray, 40);
                     const prefix = new Uint8Array([0xFF, 0xFF]);
                     const arraysToMerge = [
                         prefix,
@@ -155,9 +155,9 @@
                         textEncoder.encode(crc8),
                     ];
                     const sendMessage = mergeUint8Arrays(arraysToMerge);
+                    sendflag = true;
                     try {
                         await txCharacteristic.writeValue(sendMessage);
-                        sendflag = true;
                         // logMessage(`已发送消息: ${textEncoder.decode(sendMessage)}`);
                     } catch (error) {
                         console.error('发送消息错误:', error);
@@ -173,11 +173,11 @@
                     }
                     if (uint8ArrayData[0] === 0xFF && uint8ArrayData[1] === 0xFF) {
                         console.log(uint8ArrayData);
-                        if (sendflag) {
+                        if (sendflag) { 
                             try {
                                 const byteArray = new TextEncoder().encode(inputText.value);
                                 const crc8 = calculateCRC8(byteArray);
-                                const splitArray = splitUint8Array(byteArray, 38);
+                                const splitArray = splitUint8Array(byteArray, 40);
                                 let split = parseInt(new TextDecoder().decode(uint8ArrayData.slice(2, 8)), 16);
                                 let crc = uint8ArrayData.slice(8, 10)
                                 sendflag = false;
@@ -187,42 +187,46 @@
                                     await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0x01]));
                                     await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
                                     for (let index = split; index < splitArray.length; index++) {
-                                        const uint8Array = splitArray[index];
-                                        const modifiedUint8Array = prependStartMarker(uint8Array);
                                         try {
-                                            await txCharacteristic.writeValue(modifiedUint8Array);
+                                            await txCharacteristic.writeValue(splitArray[index]);
                                         } catch (error) {
                                             console.error('发送消息错误:', error);
                                         }
                                     }
-                                    await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
-                                    await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
+                                    noreturn = true;
+                                    setTimeout(function () {
+                                        if (noreturn) {
+                                            txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
+                                            logMessage(`已发送消息:0XFF 0XFF 0XFF`);
+                                        }
+                                    }, 2000);
                                 } else {
                                     await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xF0]));
                                     await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
                                     for (let index = 0; index < splitArray.length; index++) {
-                                        const uint8Array = splitArray[index];
-                                        const modifiedUint8Array = prependStartMarker(uint8Array);
                                         try {
-                                            await txCharacteristic.writeValue(modifiedUint8Array);
+                                            await txCharacteristic.writeValue(splitArray[index]);
                                         } catch (error) {
                                             console.error('发送消息错误:', error);
                                         }
                                     }
-                                    await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
-                                    await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
+                                    noreturn = true;
+                                    setTimeout(function () {
+                                        if (noreturn) {
+                                            txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
+                                            logMessage(`已发送消息:0XFF 0XFF 0XFF`);
+                                        }
+                                    }, 2000);
                                 }
                             } catch (error) {
                                 console.error('发送消息错误:', error);
                             }
+                        }else{
+                            noreturn = false;
                         }
                     }
-
-
                     logMessage(`收到消息: ${message}`);
                 });
-
-
             } catch (error) {
                 console.error('连接蓝牙设备错误:', error);
             }
@@ -301,11 +305,6 @@
             const paddedString = inputString.padStart(6, '0');
             const uint8Array = new TextEncoder().encode(paddedString);
             return uint8Array;
-        }
-
-        function prependStartMarker(uint8Array) {
-            const startMarker = new Uint8Array([0xFF, 0xFF]);
-            return new Uint8Array([...startMarker, ...uint8Array]);
         }
 
         // 更新设备列表的函数
