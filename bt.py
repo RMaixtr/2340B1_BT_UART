@@ -90,6 +90,7 @@ class E104_BT08(threading.Thread):
                 if b'mode' not in self.__send_data(b'+++'):
                     self.set_uart()
                     try:
+                        self.__send_data(b'+++')
                         self.set_baudrate(57600)
                     except Exception as e:
                         self.set_baudrate(57600)
@@ -101,7 +102,14 @@ class E104_BT08(threading.Thread):
                     self.__send_atdata(b'AT+RESET')
                     break
                 else:
-                    raise
+                    self.isatreturn = False
+                    self.set_uart()
+                    try:
+                        self.__send_data(b'+++')
+                        self.set_baudrate(57600)
+                    except Exception as e:
+                        self.set_baudrate(57600)
+                    break
         start_time = time.time()
         while not self.rebootflag:
             time.sleep(0.1)
