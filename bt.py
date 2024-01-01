@@ -79,7 +79,7 @@ class E104_BT08(threading.Thread):
         else:
             self.ser.write(data.encode())
 
-    def init(self, baudrate=57600, parity=AT_PARITY_NONE, timeout=1):
+    def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1):
         self.state = AT_STATE_DISCONNECT
         self.timeout = timeout
         selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
@@ -88,27 +88,39 @@ class E104_BT08(threading.Thread):
         while True:
             try:
                 if b'mode' not in self.__send_data(b'+++'):
-                    self.set_uart()
+                    self.set_uart(57600)
                     try:
                         self.__send_data(b'+++')
-                        self.set_baudrate(57600)
+                        self.set_conparams(6, 0, 200)
+                        self.set_atestate(AT_ATE_OFF)
+                        self.set_baudrate(115200)
                     except Exception as e:
-                        self.set_baudrate(57600)
+                        self.set_conparams(6, 0, 200)
+                        self.set_atestate(AT_ATE_OFF)
+                        self.set_baudrate(115200)
                 else:
+                    self.set_conparams(6, 0, 200)
+                    self.set_atestate(AT_ATE_OFF)
                     self.__send_atdata(b'AT+RESET')
                 break
             except Exception as e:
                 if str(e) == AT_ERR[b'4']:
+                    self.set_conparams(6, 0, 200)
+                    self.set_atestate(AT_ATE_OFF)
                     self.__send_atdata(b'AT+RESET')
                     break
                 else:
                     self.isatreturn = False
-                    self.set_uart()
+                    self.set_uart(57600)
                     try:
                         self.__send_data(b'+++')
-                        self.set_baudrate(57600)
+                        self.set_conparams(6, 0, 200)
+                        self.set_atestate(AT_ATE_OFF)
+                        self.set_baudrate(115200)
                     except Exception as e:
-                        self.set_baudrate(57600)
+                        self.set_conparams(6, 0, 200)
+                        self.set_atestate(AT_ATE_OFF)
+                        self.set_baudrate(115200)
                     break
         start_time = time.time()
         while not self.rebootflag:
