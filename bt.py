@@ -641,7 +641,7 @@ class E104_BT08(threading.Thread):
             self.write(self.senddata[split])
             if self.sendlen == split + 1:
                 break
-            time.sleep(0.065)
+            time.sleep(0.005)
             split += 1
         self.issendreturn = True
         self.sendendtime = time.time()
