@@ -134,6 +134,7 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
+                print(self.getcont,data)
                 for state in {
                     AT_STATE_CONNECT,
                     AT_STATE_DISCONNECT,
@@ -219,12 +220,14 @@ class E104_BT08(threading.Thread):
                         self.hostrunflag = False
                     # 接收收到传输协议返回
                     elif not self.getflag and len(data) > 10 and all(chr(byte).isalnum()
-                                        and chr(byte) in '0123456789abcdef' for byte in data[-8:]):
+                                                                     and chr(byte) in '0123456789abcdef' for byte in
+                                                                     data[-8:]):
                         self.getflag = True
                         self.getcrc = data[-2:]
                         self.getlen = int(data[-8:-2], 16)
                         self.getfilename = data[2:-8]
                         self.getcont = 0
+                        self.getdata = []
                         if os.path.exists(self.getfilename.decode('utf-8')):
                             with open(self.getfilename, 'rb') as file:
                                 while True:
@@ -242,20 +245,24 @@ class E104_BT08(threading.Thread):
                             else:
                                 self.write(b'\xff\xff00000000')
                                 self.getcont = 0
-                            self.getdata = []
                         else:
                             self.write(b'\xff\xff00000000')
                             self.getcont = 0
                     # 接收收到发送响应
                     elif self.getflag and not self.getcontflag:
                         self.getcontflag = True
-                        if data == b'\xff\xff\xf0':
+                        if data[:3] == b'\xff\xff\xf0':
+                            self.getcont = 0
                             with open(self.getfilename, "wb") as file:
                                 file.truncate(0)
                         elif data == b'\xff\xff\xff':
                             self.getflag = False
                             self.getcontflag = False
                             self.getcont = 0
+                        if len(data) > 3:
+                            self.getcont += (len(data) - 4) // 40 + 1
+                            with open(self.getfilename, "ab") as file:
+                                file.write(data[3:])
                     elif data == b'\xff\xff\xff':
                         self.getflag = False
                         self.getcontflag = False
@@ -748,3 +755,19 @@ def crc8_file(file_path):
                 break
             prev_crc = crc8(filedata)
     return hex(prev_crc & 0xFF)[2:].zfill(2).encode()
+
+
+if __name__ == '__main__':
+    e104_bt08.set_uuidserver(65521)  # 设置uuid为65521,uuid默认为65520,方便在多个模块间区分
+    e104_bt08.set_role(AT_ROLE_HOST)
+    e104_bt08.reset()  # 重启后生效
+    from maix import camera, display, image  # 引入python模块包
+
+    image.load_freetype("/root/preset/fonts/simhei.ttf")
+    hello_img = image.new(size=(320, 240), color=(0, 0, 0),
+                          mode="RGB")  # 创建一张黑色背景图
+
+    hello_img.draw_string(30, 115, "蓝牙程序已启动！", scale=1.0, color=(255, 255, 255),
+                          thickness=1)  # 在黑色背景图上写下hello world
+
+    display.show(hello_img)  # 把这张图显示出来
