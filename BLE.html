@@ -55,6 +55,8 @@
         let bluetoothDevice;
         let gattServer;
         let rxCharacteristic;
+        let startTime;
+        let endTime;
         const SERVICE_UUID = "0000fff0-0000-1000-8000-00805f9b34fb";
         const RX_UUID = "0000fff1-0000-1000-8000-00805f9b34fb";
         const TX_UUID = "0000fff2-0000-1000-8000-00805f9b34fb";
@@ -156,6 +158,7 @@
                     ];
                     const sendMessage = mergeUint8Arrays(arraysToMerge);
                     sendflag = true;
+                    startTime = new Date();
                     try {
                         await txCharacteristic.writeValue(sendMessage);
                         // logMessage(`已发送消息: ${textEncoder.decode(sendMessage)}`);
@@ -173,7 +176,7 @@
                     }
                     if (uint8ArrayData[0] === 0xFF && uint8ArrayData[1] === 0xFF) {
                         console.log(uint8ArrayData);
-                        if (sendflag) { 
+                        if (sendflag) {
                             try {
                                 const byteArray = new TextEncoder().encode(inputText.value);
                                 const crc8 = calculateCRC8(byteArray);
@@ -185,7 +188,7 @@
                                     await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
                                 } else if (split < splitArray.length && split != 0 && crc.every((val, index) => val === new TextEncoder().encode(calculateCRC8(splitArray[split - 1]))[index])) {
                                     await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0x01]));
-                                    await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
+                                    
                                     for (let index = split; index < splitArray.length; index++) {
                                         try {
                                             await txCharacteristic.writeValue(splitArray[index]);
@@ -202,7 +205,7 @@
                                     }, 2000);
                                 } else {
                                     await txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xF0]));
-                                    await new Promise((resolve) => setTimeout(resolve, 1000)); // 延迟 1 秒
+                                    
                                     for (let index = 0; index < splitArray.length; index++) {
                                         try {
                                             await txCharacteristic.writeValue(splitArray[index]);
@@ -213,6 +216,9 @@
                                     noreturn = true;
                                     setTimeout(function () {
                                         if (noreturn) {
+                                            endTime = new Date();
+                                            const intervalInSeconds = (endTime - startTime) / 1000;
+                                            logMessage(`间隔时间: ${intervalInSeconds} 秒`);
                                             txCharacteristic.writeValue(new Uint8Array([0xFF, 0xFF, 0xFF]));
                                             logMessage(`已发送消息:0XFF 0XFF 0XFF`);
                                         }
@@ -221,8 +227,11 @@
                             } catch (error) {
                                 console.error('发送消息错误:', error);
                             }
-                        }else{
+                        } else {
                             noreturn = false;
+                            endTime = new Date();
+                            const intervalInSeconds = (endTime - startTime) / 1000;
+                            logMessage(`间隔时间: ${intervalInSeconds} 秒`);
                         }
                     }
                     logMessage(`收到消息: ${message}`);
