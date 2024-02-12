@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>BLE</title>
+</head>
+
+<body>
+    <h1>BLE</h1>
+
+    <input type="text" id="uuidInput" placeholder="请输入UUID">
+    <button id="startButton">开始搜索蓝牙设备</button>
+
+    <div>
+        <label for="deviceList">选择蓝牙设备:</label>
+        <select id="deviceList"></select>
+    </div>
+
+    <div>
+        <label for="messageInput">消息:</label>
+        <input type="text" id="messageInput" placeholder="请输入消息">
+        <button id="sendMessageButton">发送消息</button>
+    </div>
+
+    <textarea id="inputText" rows="5" cols="40" placeholder="请输入传输内容">import os
+import pyaudio
+import wave
+import time
+import sys
+sys.path.append("/root/")
+from maix import display
+from maix import image
+from maix import camera
+from maix import mjpg
+from maix import utils
+import base64
+import threading
+
+def voice_numberMap(value):
+    valueScaled = float(value - 0) / float(100)
+    return int(valueScaled * 31)
+
+image.load_freetype("/root/preset/fonts/simhei.ttf")
+
+cameraSize = True
+def CAMERATYPE():
+    global cameraSize
+    if os.path.exists("/etc/cameraSize.cfg"):
+        cameraSize = True
+    else:
+        cameraSize = False
+CAMERATYPE()
+
+def lcdRotation(inputImg):
+    global SETVFLIP,SETHMIRROT,cameraSize,ScreenOrientation
+    imageRotationBuffer = inputImg.crop(0, 0, 240, 320)
+    if ScreenOrientation:
+        imgRotationAim = image.new(size = (240, 320))
+        rotationAngle = 180
+    else:
+        imgRotationAim = image.new(size = (320, 240))
+        rotationAngle = 90
+    GETROTATION = imageRotationBuffer.rotate(+rotationAngle, adjust=1)
+    GETROTATION = imgRotationAim.draw_image(GETROTATION,0,0,alpha=1)
+    if SETVFLIP and not SETHMIRROT:
+        GETROTATIONs = GETROTATION.flip(0)
+    if SETHMIRROT and not SETVFLIP:
+        GETROTATIONs = GETROTATION.flip(1)
+    if SETVFLIP and SETHMIRROT:
+        GETROTATION1 = GETROTATION.flip(0)
+        GETROTATION = GETROTATION1.flip(1)
+    return GETROTATION
+
+def lcdRotationNew(inputImg):
+    global SETVFLIP,SETHMIRROT,cameraSize,ScreenOrientation
+    imageRotationBuffer = inputImg.crop(0, 0, 320, 240)
+    if ScreenOrientation:
+        imgRotationAim = image.new(size = (240, 320))
+        rotationAngle = 90
+        GETROTATION = imageRotationBuffer.rotate(+rotationAngle, adjust=1)
+    else:
+        imgRotationAim = image.new(size = (320, 240))
+        GETROTATION = imageRotationBuffer
+
+    GETROTATION = imgRotationAim.draw_image(GETROTATION,0,0,alpha=1)
+    if SETVFLIP and not SETHMIRROT:
+        GETROTATIONs = GETROTATION.flip(0)
+    elif SETHMIRROT and not SETVFLIP:
+        GETROTATIONs = GETROTATION.flip(1)
+    elif SETVFLIP and SETHMIRROT:
+        GETROTATION1 = GETROTATION.flip(0)
+        GETROTATION = GETROTATION1.flip(1)
+    return GETROTATION
+
+def getLcdRotation(cameraCapture):
+    global cameraSize
+    if cameraSize:
+        return lcdRotationNew(cameraCapture)
+    else:
+        return lcdRotation(cameraCapture)
+
+def v831_display_show_canvas(displayShow):
+    global _canvas_y,_canvas_x,ScreenOrientation,cameraSize
+    CANVASSHOWIMGAGE = ""
+    if ScreenOrientation:
+        displayShowCanvas = image.new(size = (240, 320))
+        displayShowCanvas.draw_rectangle(0,0,240,320, color=(0,0,0), thickness=-1)
+        displayShowCanvas.draw_image(displayShow,_canvas_x,_canvas_y,alpha=1)
+        displayShowVER = displayShowCanvas.crop(0,0,240,320)
+        displayShowVER = displayShowVER.rotate(-90, adjust=1)
+        display.show(displayShowVER)
+    else:
+        displayShowCanvas = image.new(size = (320, 240))
+        displayShowCanvas.draw_rectangle(0,0,320,240, color=(0,0,0), thickness=-1)
+        displayShowCanvas.draw_image(displayShow,_canvas_x,_canvas_y,alpha=1)
+        display.show(displayShowCanvas)
+
+
+def VoicePlayState():
+    global VOICESTATE,VOICEDATA,CHUNK,VOICESTREAM,VOICEPYAUDIO,VOICEWF,VOICEPPATH
+    if VOICESTATE == 0:
+        VOICEWF = wave.open(VOICEPPATH, "rb")#(sys.argv[1], "rb"
+        VOICEPYAUDIO = pyaudio.PyAudio()
+
+        VOICESTREAM = VOICEPYAUDIO.open(format=VOICEPYAUDIO.get_format_from_width(VOICEWF.getsampwidth()),channels=VOICEWF.getnchannels(),rate=VOICEWF.getframerate(),output=True)
+
+        VOICEDATA = VOICEWF.readframes(CHUNK)
+        VOICESTATE = 1
+        return True
+    else:
+        if len(VOICEDATA) > 0:
+            try:
+                VOICESTREAM.write(VOICEDATA)
+                VOICEDATA = VOICEWF.readframes(CHUNK)
+                return True
+            except:
+                VOICESTATE = 0
+        else:
+            VOICESTREAM.stop_stream()
+            VOICESTREAM.close()
+            VOICEPYAUDIO.terminate()
+            VOICESTATE = 0
+            return False
+
+def thread_calsss_fun1():
+    global canvas,state,face_data,failure_state,_canvas_x,_canvas_y,ScreenOrientation,SETVFLIP,SETHMIRROT,RGB,VOICESTATE,VOICEDATA,VOICESTREAM,VOICEPYAUDIO,CHUNK,VOICEPPATH,VOICEPLAYSTATE,VOICEWF
+    while True:
+        VOICEPLAYSTATE = True
+        VOICEPPATH = "/root/preset/audio/luckystar.wav"
+        VOICEPLAYSTATE = VoicePlayState()
+
+CocoPiThread1 = threading.Thread(target=thread_calsss_fun1)
+
+VOICESTATE = 0
+
+VOICESTREAM = ""
+VOICEPYAUDIO = pyaudio.PyAudio()
+CHUNK = 1024
+
+VOICEPLAYSTATE = True
+VOICEWF = ""
+ScreenOrientation = False
+SETVFLIP = False
+SETHMIRROT = False
+_canvas_x = 0
+_canvas_y = 0
+
+
+
+VOICENUMP = str(voice_numberMap(50))
+time.sleep(0.01)
+SYSTEMVOICE = "amixer cset numid=8,iface=MIXER,name=\"LINEOUT volume\" "+ VOICENUMP+""
+if cameraSize==True:
+    camera.camera.config(size=(320,240))
+else:
+    camera.camera.config(size=(240,320))
+canvas = image.new(size = (320, 240))
+_canvas_x, _canvas_y = 0,0
+CocoPiThread1.start()
+while True:
+    canvas = getLcdRotation(camera.capture())
+    RGB = canvas.get_blob_color((154, 114, 10, 10), 0, 0)
+    canvas.draw_rectangle(154,114,164,124, color=(255,0,0), thickness=1)
+    canvas.draw_rectangle(0,0,319,20, color=((int(RGB[0])),(int(RGB[1])),(int(RGB[2]))), thickness=-1)
+    canvas.draw_string(120,0, ("".join([str(x) for x in ["(", int(RGB[0]), ",", int(RGB[1]), ",", int(RGB[2]), ")"]])), scale = 1, color = ((255 - int(RGB[0])),(255 - int(RGB[1])),(255 - int(RGB[2]))), thickness = 1)
+    v831_display_show_canvas(canvas)</textarea>
+
+    <div>
+        <input type="text" id="fileInput" placeholder="请输入传输文件名" value="test">
+        <button id="transmitButton">传输</button>
+        <button id="runButton">运行</button>
+        <button id="stopButton">停止</button>
+    </div>
+
+    <h3 id="state">运行状态：假</h3>
+
+    <div id="log">
+        <span>日志:</span><button id="clear">清空</button>
+    </div>
+    <script src="crc32.js"></script>
+    <script src="webble.js"></script>
+    <script>
+        const startButton = document.getElementById('startButton');
+        const deviceList = document.getElementById('deviceList');
+        const messageInput = document.getElementById('messageInput');
+        const sendMessageButton = document.getElementById('sendMessageButton');
+        const inputText = document.getElementById('inputText');
+        const fileInput = document.getElementById('fileInput');
+        const transmitButton = document.getElementById('transmitButton');
+        const runButton = document.getElementById('runButton');
+        const stopButton = document.getElementById('stopButton');
+        const state = document.getElementById('state');
+        const log = document.getElementById('log');
+        const clearButton = document.getElementById('clear');
+
+
+        var bluetoothDevice = ''
+        startButton.addEventListener('click', async () => {
+            bluetoothDevice = await requestDevice();
+        });
+
+        transmitButton.addEventListener('click', async () => {
+            bleuploadfile(fileInput.value, inputText.value, function (event) {})
+        });
+    </script>
+</body>
+
+</html>
