@@ -137,9 +137,6 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                print(data)
-                if data[-3:] == b'as)':
-                    print(time.time() - self.starttime)
                 for state in {AT_STATE_CONNECT, AT_STATE_DISCONNECT, b'START\r\n', AT_STATE_WAKEUP, AT_STATE_SLEEP}:
                     if state in data:
                         self.connectdelayflag = False
@@ -164,7 +161,7 @@ class E104_BT08(threading.Thread):
                     self.isatreturn = False
                 elif data[0:2] == b'\xff\xff':
                     # 发送文件结束接收返回
-                    if self.issendreturn and len(data) == 16 and all(byte in b'0123456789abcdef' for byte in data[2:]):
+                    if self.issendreturn and len(data) == 16 and all(byte in b'0123456789abcdef' for byte in data[-8:]):
                         split = bytes_to_int(data[2:8])
                         crc = data[-8:]
                         if split == self.sendlen and self.sendcrc == crc:
@@ -176,7 +173,7 @@ class E104_BT08(threading.Thread):
                         self.sendflag = False
                         self.issendreturn = False
                     # 发送等待接收方回应
-                    elif self.sendflag and len(data) == 16 and all(byte in b'0123456789abcdef' for byte in data[2:]):
+                    elif self.sendflag and len(data) == 16 and all(byte in b'0123456789abcdef' for byte in data[-8:]):
                         split = bytes_to_int(data[2:8])
                         crc = data[-8:]
                         if split != 0:
@@ -279,7 +276,7 @@ class E104_BT08(threading.Thread):
                         for call in self.datacallback:
                             call(self, data)
             time.sleep(0.05)
-            if self.getflag and not self.is_connected():
+            if self.getflag and not self.is_connected() and not self.connectdelayflag:
                 self.getflag = False
                 self.getcontflag = False
             if self.issendreturn:
