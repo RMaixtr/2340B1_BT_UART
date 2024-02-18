@@ -56,9 +56,6 @@ class E104_BT08(threading.Thread):
         self.getfilename = b''
         self.getlen = 0
         self.getcrc = b''
-
-        self.starttime = 0
-
         self.getcont = 0
         self.getcontflag = False
         self.runthread = None
@@ -148,6 +145,9 @@ class E104_BT08(threading.Thread):
                             self.connectdelayflag = True
                             self.connectdelaytime = time.time()
                             break
+                        elif state == AT_STATE_DISCONNECT:
+                            self.getflag = False
+                            self.getcontflag = False
                         self.state = state
                         if self.statecallback:
                             for call in self.statecallback:
@@ -220,7 +220,6 @@ class E104_BT08(threading.Thread):
                         self.getlen = bytes_to_int(data[-14:-8])
                         self.getfilename = data[2:-14]
                         self.getcont = 0
-                        self.starttime = time.time()
                         if os.path.exists(self.getfilename.decode('utf-8')):
                             with open(self.getfilename, 'rb') as file:
                                 filedata = file.read()
@@ -276,9 +275,6 @@ class E104_BT08(threading.Thread):
                         for call in self.datacallback:
                             call(self, data)
             time.sleep(0.05)
-            if self.getflag and not self.is_connected() and not self.connectdelayflag:
-                self.getflag = False
-                self.getcontflag = False
             if self.issendreturn:
                 if time.time() - self.sendendtime >= 2 * self.timeout:
                     self.write(b'\xff\xff\xff')
