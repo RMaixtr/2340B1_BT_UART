@@ -744,6 +744,13 @@ if __name__ == '__main__':
     e104_bt08.set_uuidserver(65521)  # 设置uuid为65521,uuid默认为65520,方便在多个模块间区分
     e104_bt08.set_role(AT_ROLE_HOST)
     e104_bt08.reset()  # 重启后生效
-    while True:
-        a = input()
-        e104_bt08.write(a)
+    from maix import camera, display, image  # 引入python模块包
+
+    image.load_freetype("/root/preset/fonts/simhei.ttf")
+    hello_img = image.new(size=(320, 240), color=(0, 0, 0),
+                          mode="RGB")  # 创建一张黑色背景图
+
+    hello_img.draw_string(30, 115, "蓝牙程序已启动！", scale=1.0, color=(255, 255, 255),
+                          thickness=1)  # 在黑色背景图上写下hello world
+
+    display.show(hello_img)  # 把这张图显示出来
