@@ -12,7 +12,10 @@ import traceback
 import zlib
 import zipfile
 
-AT_STATE_START, AT_STATE_CONNECT, AT_STATE_DISCONNECT = b'DEVICE START', b' CONNECTED ', b' DISCONNECTED'
+AT_STATE_START, AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_CONNECT_TIMEOUT \
+    = b'DEVICE START', b'^([0-9A-F]{2}[:]){5}([0-9A-F]{2}) CONNECTED ' \
+    , b'^([0-9A-F]{2}[:]){5}([0-9A-F]{2}) DISCONNECTED', \
+      b'^([0-9A-F]{2}[:]){5}([0-9A-F]{2}) CONNECTED TIMEOUT'
 AT_ROLE_SLAVE, AT_ROLE_HOST, AT_ROLE_SLAVE_AND_HOST, AT_ROLE_BEACON = b'0', b'1', b'2', b'3'
 AT_NAME_TYPE_ASCII, AT_NAME_TYPE_HEX = b'0', b'1'
 
@@ -42,10 +45,8 @@ class E104_BT08(threading.Thread):
         self.sendfilename = b''
         self.getflag = False
         self.getfilename = ''
-
         self.zipfile = ''
         self.socfile = ''
-
         self.getlen = 0
         self.getcrc = b''
         self.getcont = 0
@@ -53,9 +54,6 @@ class E104_BT08(threading.Thread):
         self.runthread = None
         self.hostrunflag = False
         self.slaverunflag = False
-        self.connectdelayflag = False
-        self.connectdelaytime = 0
-
         self.sendtime = 0
         self.init()
 
@@ -88,29 +86,9 @@ class E104_BT08(threading.Thread):
         while self.loopflag:
             count = self.ser.inWaiting()
             if count != 0:
-                isstatedata = False
                 data = self.ser.read(count)
                 print(data)
-                for state in {AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_START}:
-                    if state in data:
-                        self.connectdelayflag = False
-                        isstatedata = True
-                        if state == AT_STATE_START:
-                            self.rebootflag = True
-                            self.state = AT_STATE_DISCONNECT
-                        elif state == AT_STATE_CONNECT:
-                            self.connectdelayflag = True
-                            self.connectdelaytime = time.time()
-                            break
-                        elif state == AT_STATE_DISCONNECT:
-                            self.getflag = False
-                            self.getcontflag = False
-                        self.state = state
-                        if self.statecallback:
-                            for call in self.statecallback:
-                                call(self, state)
-                        break
-                if isstatedata:
+                if self.__is_state(data):
                     continue
                 # at指令返回
                 elif self.isatreturn:
@@ -180,7 +158,6 @@ class E104_BT08(threading.Thread):
                                                     os.path.basename((data[2:-14] + b'.zip').decode('utf-8')))
                         self.socfile = os.path.dirname(os.path.abspath(data[2:-14].decode('utf-8')))
                         self.sendtime = time.time()
-                        print("get",self.getcrc,self.getlen)
                         if os.path.exists(self.zipfile):
                             with open(self.zipfile, 'rb') as file:
                                 filedata = file.read()
@@ -231,7 +208,6 @@ class E104_BT08(threading.Thread):
                     with open(self.zipfile, "ab") as file:
                         file.write(data)
                     if self.getcont == self.getlen and crc32_file(self.zipfile) == self.getcrc:
-                        print("get", self.getcrc, self.getcont)
                         self.getflag = False
                         self.getcontflag = False
                         self.write(b'\xff\xff' + int_to_bytes(self.getlen) + self.getcrc)
@@ -261,13 +237,33 @@ class E104_BT08(threading.Thread):
                     self.issendreturn = False
                     for call in self.sendendcallback:
                         call(self, False)
-            if self.connectdelayflag:
-                if time.time() - self.connectdelaytime >= 1:
-                    self.connectdelayflag = False
-                    self.state = AT_STATE_CONNECT
-                    if self.statecallback:
-                        for call in self.statecallback:
-                            call(self, AT_STATE_CONNECT)
+
+    def __is_state(self,data):
+        if re.search(AT_STATE_CONNECT_TIMEOUT, data):
+            if self.statecallback:
+                for call in self.statecallback:
+                    call(self, AT_STATE_CONNECT_TIMEOUT)
+        elif re.search(AT_STATE_CONNECT, data):
+            self.state = AT_STATE_CONNECT
+            if self.statecallback:
+                for call in self.statecallback:
+                    call(self, AT_STATE_CONNECT)
+        elif re.search(AT_STATE_DISCONNECT, data):
+            self.getflag = False
+            self.getcontflag = False
+            self.state = AT_STATE_DISCONNECT
+            if self.statecallback:
+                for call in self.statecallback:
+                    call(self, AT_STATE_DISCONNECT)
+        elif AT_STATE_START in data and not self.rebootflag:
+            self.rebootflag = True
+            self.state = AT_STATE_DISCONNECT
+            if self.statecallback:
+                for call in self.statecallback:
+                    call(self, AT_STATE_START)
+        else:
+            return False
+        return True
 
     def is_connected(self):
         return self.get_state() == AT_STATE_CONNECT
@@ -405,6 +401,12 @@ class E104_BT08(threading.Thread):
     def set_name(self, name, nametype=AT_NAME_TYPE_ASCII):
         return b'OK\r\n' in self.__send_atdata(b'AT+NAME=' + nametype + name + b'\r\n')
 
+    def connect_mac(self, mac):
+        return b'OK\r\n' in self.__send_atdata(b'AT+CONNECT=,' + mac + b'\r\n')
+
+    def connect_filter(self, hex):
+        return b'OK\r\n' in self.__send_atdata(b'AT+CONNECT=,f1:f2:f3:f4:' + hex[:2] + b':' + hex[2:] + b'\r\n')
+
     def disconnect(self):
         return b'OK\r\n' in self.__send_atdata(b'AT+DISCONNECT\r\n')
 
@@ -412,13 +414,12 @@ class E104_BT08(threading.Thread):
         return re.search(b'MAC:(\w+)', self.__send_atdata(b'AT+MAC?\r\n')).group(1)
 
     def set_mac(self, mac=b'FF:FF:FF:FF:FF:FF'):
-        if len(mac) != 12:
-            return False
+
         return b'OK\r\n' in self.__send_atdata(b'AT+MAC=' + mac + b'\r\n')
 
-    def connect(self, mac):
-        return b'OK\r\n' in self.__send_atdata(b'AT+CONNECT=,' + mac + b'\r\n')
-
+    def set_filter(self, hex):
+        self.set_mac(b'f1:f2:f3:f4:' + hex[:2] + b':' + hex[2:])
+        self.set_service(0, hex, b'FFF1', b'FFF2', b'FFF3')
 
     def set_cntinterval(self, cntInterval=16, timeout=200):
         set_data = b'AT+CNT_INTERVAL=' + str(cntInterval).encode() + b',' + str(timeout).encode() + b'\r\n'
@@ -437,10 +438,12 @@ class E104_BT08(threading.Thread):
         elif len(save_file_name) > 32:
             save_file_name = b'bt_tmp.log'
         self.sendfilename = save_file_name
-        self.senddata = b''
-        self.sendcrc = crc32_file(file_path)
-        with open(file_path, 'rb') as file:
-            self.senddata = file.read()
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zipf:
+            zipf.write(file_path)
+        self.senddata = buffer.getvalue()
+        buffer.close()
+        self.sendcrc = crc32(self.senddata)
         self.sendlen = len(self.senddata)
         split = int_to_bytes(self.sendlen)
         send_data = b'\xff\xff' + save_file_name + split + self.sendcrc
@@ -573,13 +576,13 @@ def decompress_file(zip_filename, output_dir):
 
 
 if __name__ == '__main__':
+    e104_bt08.set_role(AT_ROLE_SLAVE)
+    e104_bt08.restart()
     from maix import camera, display, image  # 引入python模块包
 
     image.load_freetype("/root/preset/fonts/simhei.ttf")
     hello_img = image.new(size=(320, 240), color=(0, 0, 0),
                           mode="RGB")  # 创建一张黑色背景图
-
     hello_img.draw_string(30, 115, "蓝牙程序已启动！", scale=1.0, color=(255, 255, 255),
                           thickness=1)  # 在黑色背景图上写下hello world
-
     display.show(hello_img)  # 把这张图显示出来
