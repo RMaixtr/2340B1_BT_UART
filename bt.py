@@ -3,7 +3,6 @@ import serial
 import re
 import time
 import queue
-import json
 from io import BytesIO
 import sys
 import os
@@ -11,23 +10,11 @@ import inspect
 import ctypes
 import traceback
 import zlib
+import zipfile
 
-AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_WAKEUP, AT_STATE_SLEEP = \
-    b'\r\n STA:connect', b'\r\n disconnect', b'\r\n STA:wakeup', b'\r\n STA:sleep'
-AT_BAUD = {b'0': 1200, b'1': 2400, b'2': 4800, b'3': 9600, b'4': 14400, b'5': 19200, b'6': 28800,
-           b'7': 38400, b'8': 57600, b'9': 76800, b'10': 115200, b'11': 230400, b'12': 500000, b'13': 1000000}
-AT_PARITY_NONE, AT_PARITY_ODD, AT_PARITY_EVEN = b'0', b'1', b'2'
-PARITY_MAPPING = {
-    AT_PARITY_NONE: serial.PARITY_NONE,
-    AT_PARITY_ODD: serial.PARITY_ODD,
-    AT_PARITY_EVEN: serial.PARITY_EVEN
-}
-AT_ROLE_HOST, AT_ROLE_SLAVE = b'0', b'1'
-AT_BROADCAST_OFF, AT_BROADCAST_NORMAL, AT_BROADCAST_IBEACON = b'0', b'1', b'2'
-AT_PWR_8DBM, AT_PWR_0DBM, AT_PWR_NEG_5DBM, AT_PWR_NEG_20DBM = b'0', b'1', b'2', b'3'
-AT_BOND_ABLE, AT_BOND_DISABLE = b'0', b'1'
-AT_ATE_OFF, AT_ATE_OPEN = b'0', b'1'
-AT_ERR = {b'1': '长度不匹配', b'2': '超过量程', b'3': '未找到参数', b'4': '不支持该指令', b'5': '保存flash失败', b'6': '参数非法'}
+AT_STATE_START, AT_STATE_CONNECT, AT_STATE_DISCONNECT = b'DEVICE START', b' CONNECTED ', b' DISCONNECTED'
+AT_ROLE_SLAVE, AT_ROLE_HOST, AT_ROLE_SLAVE_AND_HOST, AT_ROLE_BEACON = b'0', b'1', b'2', b'3'
+AT_NAME_TYPE_ASCII, AT_NAME_TYPE_HEX = b'0', b'1'
 
 
 class E104_BT08(threading.Thread):
@@ -43,6 +30,7 @@ class E104_BT08(threading.Thread):
         self.statecallback = []
         self.sendendcallback = []
         self.isatreturn = False
+        self.isatmod = False
         self.issendreturn = False
         self.sendendtime = 0
         self.loopflag = True
@@ -53,7 +41,11 @@ class E104_BT08(threading.Thread):
         self.sendlen = 0
         self.sendfilename = b''
         self.getflag = False
-        self.getfilename = b''
+        self.getfilename = ''
+
+        self.zipfile = ''
+        self.socfile = ''
+
         self.getlen = 0
         self.getcrc = b''
         self.getcont = 0
@@ -63,6 +55,8 @@ class E104_BT08(threading.Thread):
         self.slaverunflag = False
         self.connectdelayflag = False
         self.connectdelaytime = 0
+
+        self.sendtime = 0
         self.init()
 
     def __del__(self):
@@ -79,54 +73,16 @@ class E104_BT08(threading.Thread):
         else:
             self.ser.write(data.encode())
 
-    def init(self, baudrate=115200, parity=AT_PARITY_NONE, timeout=1):
+    def init(self, baudrate=115200, parity=serial.PARITY_NONE, timeout=1):
         self.state = AT_STATE_DISCONNECT
         self.timeout = timeout
-        selected_parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
-        self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=selected_parity)
+        self.ser = serial.Serial("/dev/ttyS1", baudrate=baudrate, parity=parity)  # /dev/ttyS1
         self.start()
-        while True:
-            try:
-                if b'mode' not in self.__send_data(b'+++'):
-                    self.set_uart(57600)
-                    try:
-                        self.__send_data(b'+++')
-                        self.set_conparams(6, 0, 200)
-                        self.set_atestate(AT_ATE_OFF)
-                        self.set_baudrate(115200)
-                    except Exception as e:
-                        self.set_conparams(6, 0, 200)
-                        self.set_atestate(AT_ATE_OFF)
-                        self.set_baudrate(115200)
-                else:
-                    self.set_conparams(6, 0, 200)
-                    self.set_atestate(AT_ATE_OFF)
-                    self.__send_atdata(b'AT+RESET')
-                break
-            except Exception as e:
-                if str(e) == AT_ERR[b'4']:
-                    self.set_conparams(6, 0, 200)
-                    self.set_atestate(AT_ATE_OFF)
-                    self.__send_atdata(b'AT+RESET')
-                    break
-                else:
-                    self.isatreturn = False
-                    self.set_uart(57600)
-                    try:
-                        self.__send_data(b'+++')
-                        self.set_conparams(6, 0, 200)
-                        self.set_atestate(AT_ATE_OFF)
-                        self.set_baudrate(115200)
-                    except Exception as e:
-                        self.set_conparams(6, 0, 200)
-                        self.set_atestate(AT_ATE_OFF)
-                        self.set_baudrate(115200)
-                    break
-        start_time = time.time()
-        while not self.rebootflag:
-            time.sleep(0.1)
-            if time.time() - start_time >= self.timeout:
-                raise TimeoutError("等待蓝牙重启超时")
+
+        self.enter_at()
+        self.set_service(0, b'FFF0', b'FFF1', b'FFF2', b'FFF3')
+        self.set_cntinterval(6, 200)
+        self.restart()
 
     def run(self):
         while self.loopflag:
@@ -134,11 +90,12 @@ class E104_BT08(threading.Thread):
             if count != 0:
                 isstatedata = False
                 data = self.ser.read(count)
-                for state in {AT_STATE_CONNECT, AT_STATE_DISCONNECT, b'START\r\n', AT_STATE_WAKEUP, AT_STATE_SLEEP}:
+                print(data)
+                for state in {AT_STATE_CONNECT, AT_STATE_DISCONNECT, AT_STATE_START}:
                     if state in data:
                         self.connectdelayflag = False
                         isstatedata = True
-                        if state == b'START\r\n':
+                        if state == AT_STATE_START:
                             self.rebootflag = True
                             self.state = AT_STATE_DISCONNECT
                         elif state == AT_STATE_CONNECT:
@@ -172,7 +129,7 @@ class E104_BT08(threading.Thread):
                                 call(self, False)
                         self.sendflag = False
                         self.issendreturn = False
-                    # 发送等待接收方回应
+                    # 发送指令接收方回应
                     elif self.sendflag and len(data) == 16 and all(byte in b'0123456789abcdef' for byte in data[-8:]):
                         split = bytes_to_int(data[2:8])
                         crc = data[-8:]
@@ -218,10 +175,14 @@ class E104_BT08(threading.Thread):
                         self.getflag = True
                         self.getcrc = data[-8:]
                         self.getlen = bytes_to_int(data[-14:-8])
-                        self.getfilename = data[2:-14]
                         self.getcont = 0
-                        if os.path.exists(self.getfilename.decode('utf-8')):
-                            with open(self.getfilename, 'rb') as file:
+                        self.zipfile = os.path.join(os.getcwd(), 'bletemp',
+                                                    os.path.basename((data[2:-14] + b'.zip').decode('utf-8')))
+                        self.socfile = os.path.dirname(os.path.abspath(data[2:-14].decode('utf-8')))
+                        self.sendtime = time.time()
+                        print("get",self.getcrc,self.getlen)
+                        if os.path.exists(self.zipfile):
+                            with open(self.zipfile, 'rb') as file:
                                 filedata = file.read()
                             cmpcrc = crc32(filedata)
                             if self.getlen == len(filedata) and self.getcrc == cmpcrc:
@@ -234,6 +195,8 @@ class E104_BT08(threading.Thread):
                                 self.write(b'\xff\xff00000000000000')
                                 self.getcont = 0
                         else:
+                            if not os.path.exists(os.path.dirname(self.zipfile)):
+                                os.makedirs(os.path.dirname(self.zipfile))
                             self.write(b'\xff\xff00000000000000')
                             self.getcont = 0
                     # 根据接收响应发送
@@ -241,7 +204,7 @@ class E104_BT08(threading.Thread):
                         self.getcontflag = True
                         if data[:3] == b'\xff\xff\xf0':
                             self.getcont = 0
-                            with open(self.getfilename, "wb") as file:
+                            with open(self.zipfile, "wb") as file:
                                 file.truncate(0)
                         elif data == b'\xff\xff\xff':
                             self.getflag = False
@@ -249,26 +212,42 @@ class E104_BT08(threading.Thread):
                             self.getcont = 0
                         if len(data) > 3:
                             self.getcont += len(data) - 3
-                            with open(self.getfilename, "ab") as file:
+                            with open(self.zipfile, "ab") as file:
                                 file.write(data[3:])
-                            if self.getcont == self.getlen and crc32_file(self.getfilename) == self.getcrc:
+                            if self.getcont == self.getlen and crc32_file(self.zipfile) == self.getcrc:
                                 self.getflag = False
                                 self.getcontflag = False
                                 self.write(b'\xff\xff' + int_to_bytes(self.getlen) + self.getcrc)
                                 self.getcont = 0
+                                decompress_file(self.zipfile, self.socfile)
+                                os.remove(self.zipfile)
+                                print(time.time() - self.sendtime)
                     elif data == b'\xff\xff\xff':
                         self.getflag = False
                         self.getcontflag = False
                         self.getcont = 0
                 elif self.getflag and self.getcontflag:
                     self.getcont += len(data)
-                    with open(self.getfilename, "ab") as file:
+                    with open(self.zipfile, "ab") as file:
                         file.write(data)
-                    if self.getcont == self.getlen and crc32_file(self.getfilename) == self.getcrc:
+                    if self.getcont == self.getlen and crc32_file(self.zipfile) == self.getcrc:
+                        print("get", self.getcrc, self.getcont)
                         self.getflag = False
                         self.getcontflag = False
                         self.write(b'\xff\xff' + int_to_bytes(self.getlen) + self.getcrc)
                         self.getcont = 0
+                        decompress_file(self.zipfile, self.socfile)
+                        os.remove(self.zipfile)
+                        print(time.time() - self.sendtime)
+                elif self.isatmod and data[:10] == b'+RECEIVED:':
+                    temp = b''
+                    for dataspl in data.split(b'\r\n')[2:-1]:
+                        temp += dataspl + b'\r\n'
+                    atdata = temp[:-4]
+                    self.f.write(atdata)
+                    if self.datacallback:
+                        for call in self.datacallback:
+                            call(self, atdata)
                 else:
                     self.f.write(data)
                     if self.datacallback:
@@ -319,10 +298,8 @@ class E104_BT08(threading.Thread):
         while True:
             if not self.q.empty():
                 data = self.q.get()
-                err = re.search(b'\+ERROR (\d)', data)
-                if err is not None:
-                    if err.group(1) in AT_ERR:
-                        raise Exception(AT_ERR[err.group(1)])
+                if b'ERROR\r\n' in data:
+                    raise Exception("ATERR")
                 return data
             time.sleep(0.03)
             if time.time() - start_time >= self.timeout:
@@ -333,64 +310,24 @@ class E104_BT08(threading.Thread):
             data = self.__send_data(data)
         except Exception as e:
             if str(e) == "等待AT指令回应超时":
+                if data == b'+++':
+                    self.isatreturn = False
+                    return b'OK\r\n'
                 try:
                     self.isatreturn = False
                     self.enter_at()
                     data = self.__send_data(data)
                     self.exit_at()
                 except Exception as e:
-                    if str(e) == AT_ERR[b'4']:
+                    if str(e) == "ATERR":
                         data = self.__send_data(data)
                     else:
                         raise
-            elif str(e) == AT_ERR[b'4']:
+            elif str(e) == "ATERR":
                 data = self.__send_data(data)
             else:
                 raise
         return data if data else b''
-
-    def backup_config(self):
-        data = {"BAUD": self.get_baudrate(), "PARI": self.get_parity(), "ROLE": self.get_role(), "ADV": self.get_adv(),
-                "ADVDAT": self.get_advdata(), "ADVINTV": self.get_advintv(), "NAME": self.get_name(),
-                "CONPARAMS": self.get_conparams(), "MAC": self.get_mac(), "BONDMAC": self.get_bondmac(),
-                "MTU": self.get_mtu(), "SCANWND": self.get_scanwindow(), "UUIDSVR": self.get_uuidserver(),
-                "UPAUTH": self.get_upauth(), "ATE": self.get_atestate(), "PWR": self.get_power(),
-                "BOND": self.get_bondenable()}
-        return json.dumps(data)
-
-    def restore_config(self, backup):
-        data = json.loads(backup)
-        self.set_baudrate(data["BAUD"])
-        self.set_parity(data["PARI"])
-        self.set_role(data["ROLE"])
-        self.set_adv(data["ADV"])
-        self.set_advdata(data["ADVDAT"])
-        self.set_advintv(data["ADVINTV"])
-        self.set_name(data["NAME"])
-        self.set_conparams(data["CONPARAMS"])
-        self.set_mac(data["MAC"])
-        self.set_bondmac(data["BONDMAC"])
-        self.set_mtu(data["MTU"])
-        self.set_scanwindow(data["SCANWND"])
-        self.set_uuidserver(data["UUIDSVR"])
-        self.set_upauth(data["UPAUTH"])
-        self.set_atestate(data["ATE"])
-        self.set_power(data["PWR"])
-        self.set_bondenable(data["BOND"])
-
-    def test_uart(self):
-        for par, serpar in PARITY_MAPPING.items():
-            self.ser.parity = serpar
-            for cont, baud in AT_BAUD.items():
-                self.ser.baudrate = baud
-                try:
-                    data = self.__send_data(b'+++')
-                    time.sleep(0.03)
-                except Exception as e:
-                    return baud, par
-                if b'enter_at_mode' in data:
-                    return baud, par
-        return None, None
 
     def add_data_callback(self, function):
         self.datacallback.append(function)
@@ -410,192 +347,82 @@ class E104_BT08(threading.Thread):
     def del_sendend_callback(self, function=None):
         self.sendendcallback.remove(function) if function else self.sendendcallback.pop()
 
-    def set_uart(self, baudrate=115200, parity=AT_PARITY_NONE):
+    def set_uart(self, baudrate=115200, parity=serial.PARITY_NONE):
         self.ser.baudrate = baudrate
-        self.ser.parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
-
-    def at_test(self):
-        return b'+OK\r\n' in self.__send_atdata(b'AT')
+        self.ser.parity = parity
 
     def enter_at(self):
-        return b'+enter_at_mode\r\n' in self.__send_atdata(b'+++')
+        self.isatmod = True
+        return b'OK\r\n' in self.__send_atdata(b'+++')
 
     def exit_at(self):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+EXIT')
+        return b'OK\r\n' in self.__send_atdata(b'AT+EXIT\r\n')
 
-    def reset(self):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+RESET')
-
-    def restore(self):
-        redata = b'+OK\r\n' in self.__send_atdata(b'AT+RESTORE')
-        self.ser.baudrate = 115200
-        self.ser.parity = serial.PARITY_NONE
-        return redata
-
-    def get_baudrate(self):
-        baudnum = re.search(b'BAUD:(\d+)', self.__send_atdata(b'AT+BAUD=?'))
-        return AT_BAUD[baudnum.group(1)]
-
-    def set_baudrate(self, baudrate):
-        for key, val in AT_BAUD.items():
-            if val == baudrate:
-                data = b'+OK\r\n' in self.__send_atdata(b'AT+BAUD=' + key)
-                time.sleep(1)
-                self.reset()
-                self.ser.baudrate = baudrate
-                return data
-        return False
-
-    def get_parity(self):
-        return re.search(b'PARI:(\d)', self.__send_atdata(b'AT+PARI=?')).group(1)
-
-    def set_parity(self, parity):
-        data = b'+OK\r\n' in self.__send_atdata(b'AT+PARI=' + parity)
-        self.ser.parity = PARITY_MAPPING.get(parity, serial.PARITY_NONE)
-        return data
-
-    def get_role(self):
-        return re.search(b'ROLE:(\d)', self.__send_atdata(b'AT+ROLE=?')).group(1)
-
-    def set_role(self, role):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+ROLE=' + role)
-
-    def get_adv(self):
-        return re.search(b'ADV:(\d)', self.__send_atdata(b'AT+ADV=?')).group(1)
-
-    def set_adv(self, adv):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+ADV=' + adv)
-
-    def get_advdata(self):
-        return re.search(b'ADVDAT:(.*?)\r\n', self.__send_atdata(b'AT+ADVDAT=?')).group(1)
-
-    def set_advdata(self, data, vendor_data=b'\x01\x02'):
-        length = len(b'\xff' + vendor_data + data)
-        if length >= 29 or len(vendor_data) > 2:
-            return False
-        set_data = b'AT+ADVDAT=' + bytes.fromhex(format(length, '02x')) + b'\xff' + vendor_data + data
-        return b'+OK\r\n' in self.__send_atdata(set_data)
-
-    def set_ibeacon_advdata(self, uuid, major, minor, power):
-        if len(uuid) != 16 or len(major) != 2 or len(minor) != 2 or len(power) != 1:
-            return False
-        set_data = b'AT+ADVDAT=\x1a\xff\x4c\x00\x02\x15' + uuid + major + minor + power
-        return b'+OK\r\n' in self.__send_atdata(set_data)
-
-    def get_advintv(self):
-        return int(re.search(b'ADVINTV:(\d+)', self.__send_atdata(b'AT+ADVINTV=?')).group(1))
-
-    def set_advintv(self, advintv=32):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+ADVINTV=' + str(advintv).encode())
-
-    def get_name(self):
-        return re.search(b'NAME:(\S+)', self.__send_atdata(b'AT+NAME=?')).group(1)
-
-    def set_name(self, name):
-        if len(name) > 25:
-            return False
-        return b'+OK\r\n' in self.__send_atdata(b'AT+NAME=' + name)
-
-    def get_conparams(self):
-        return [int(byte_str) for byte_str in re.findall(b'\d+', self.__send_atdata(b'AT+CONPARAMS=?'))]
-
-    def set_conparams(self, connection_delay=40, slave_delay=0, parameter_exception=20):
-        if connection_delay < 6 or connection_delay > 3200 or slave_delay > 499 \
-                or parameter_exception < 10 or parameter_exception > 3200 \
-                or parameter_exception * 4 <= (1 + slave_delay) * connection_delay:
-            return False
-        set_data = b'AT+CONPARAMS=' + str(connection_delay).encode() + b',' \
-                   + str(slave_delay).encode() + b',' + str(parameter_exception).encode()
-        return b'+OK\r\n' in self.__send_atdata(set_data)
-
-    def disconnect(self, con=0):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+DISCON=' + str(con).encode())
-
-    def get_mac(self):
-        return re.search(b'MAC:(\w+)', self.__send_atdata(b'AT+MAC=?')).group(1)
-
-    def set_mac(self, mac):
-        if len(mac) != 12:
-            return False
-        return b'+OK\r\n' in self.__send_atdata(b'AT+MAC=' + mac)
-
-    def get_bondmac(self):
-        return re.findall(b'MAC:(\w+)', self.__send_atdata(b'AT+BONDMAC=?'))
-
-    def set_bondmac(self, mac):
-        if len(mac) == 12:
-            return b'+OK\r\n' in self.__send_atdata(b'AT+BONDMAC=' + mac)
-        elif len(mac) == 2:
-            if len(mac[0] == 12):
-                self.__send_atdata(b'AT+BONDMAC=' + mac[0])
-                self.__send_atdata(b'AT+BONDMAC=' + mac[1])
-                return True
-            else:
-                return False
-        else:
-            return False
-
-    def get_mtu(self):
-        return int(re.search(b'MTU:(\d+)', self.__send_atdata(b'AT+MTU=?')).group(1))
-
-    def set_mtu(self, mtu):
-        if mtu < 23 or mtu > 247:
-            return False
-        return b'+OK\r\n' in self.__send_atdata(b'AT+MTU=' + str(mtu).encode())
-
-    def get_scanwindow(self):
-        return int(re.search(b'SCANWND:(\d+)', self.__send_atdata(b'AT+SCANWND=?')).group(1))
-
-    def set_scanwindow(self, scanwnd=1000):
-        if scanwnd < 40 or scanwnd > 9999:
-            return False
-        return b'+OK\r\n' in self.__send_atdata(b'AT+SCANWND=' + str(scanwnd).encode())
-
-    def get_uuidserver(self):
-        return int(re.search(b'UUIDSVR:(\d+)', self.__send_atdata(b'AT+UUIDSVR=?')).group(1))
-
-    def set_uuidserver(self, uuidserver):
-        if uuidserver > 65535:
-            return False
-        return b'+OK\r\n' in self.__send_atdata(b'AT+UUIDSVR=' + str(uuidserver).encode())
-
-    def set_auth(self, password):
-        if len(password) != 6:
-            return False
-        self.__send_atdata(b'AT+AUTH=' + password)
+    def restart(self):
+        self.__send_atdata(b'AT+RESTART\r\n')
+        start_time = time.time()
+        while not self.rebootflag:
+            time.sleep(0.1)
+            if time.time() - start_time >= 3:
+                raise TimeoutError("等待蓝牙重启超时")
+        self.rebootflag = False
         return True
 
-    def get_upauth(self):
-        return re.search(b'AUTH:(\w+)', self.__send_atdata(b'AT+UPAUTH=?')).group(1)
+    def reset(self):
+        self.__send_atdata(b'AT+RESET\r\n')
+        self.set_uart()
+        start_time = time.time()
+        while not self.rebootflag:
+            time.sleep(0.1)
+            if time.time() - start_time >= 3:
+                raise TimeoutError("等待蓝牙重启超时")
+        self.rebootflag = False
+        return True
 
-    def set_upauth(self, password):
-        if len(password) != 6:
+    def set_service(self, bit, serviceUUID, rxUUID, txUUID, atUUID, baseUUID=None):
+        if baseUUID:
+            return b'OK\r\n' in self.__send_atdata(b'AT+SERVICE=' + str(bit).encode() + b',' + serviceUUID + b','
+                                                   + rxUUID + b',' + txUUID + b',' + atUUID + b',' + baseUUID + b'\r\n')
+        else:
+            return b'OK\r\n' in self.__send_atdata(b'AT+SERVICE=' + str(bit).encode() + b',' + serviceUUID + b','
+                                                   + rxUUID + b',' + txUUID + b',' + atUUID + b'\r\n')
+
+    def get_baudrate(self):
+        return re.search(b'UART=(\d+)', self.__send_atdata(b'AT+UART?\r\n')).group(1)
+
+    def set_baudrate(self, baudrate):
+        return b'OK\r\n' in self.__send_atdata(b'AT+UART=' + str(baudrate).encode() + b'\r\n')
+
+    def get_role(self):
+        return re.search(b'ROLE=(\d)', self.__send_atdata(b'AT+ROLE?\r\n')).group(1)
+
+    def set_role(self, role):
+        return b'OK\r\n' in self.__send_atdata(b'AT+ROLE=' + role + b'\r\n')
+
+    def get_name(self):
+        return re.search(b'NAME=(\S+)', self.__send_atdata(b'AT+NAME?\r\n')).group(1).split(b',')
+
+    def set_name(self, name, nametype=AT_NAME_TYPE_ASCII):
+        return b'OK\r\n' in self.__send_atdata(b'AT+NAME=' + nametype + name + b'\r\n')
+
+    def disconnect(self):
+        return b'OK\r\n' in self.__send_atdata(b'AT+DISCONNECT\r\n')
+
+    def get_mac(self):
+        return re.search(b'MAC:(\w+)', self.__send_atdata(b'AT+MAC?\r\n')).group(1)
+
+    def set_mac(self, mac=b'FF:FF:FF:FF:FF:FF'):
+        if len(mac) != 12:
             return False
-        return b'+OK\r\n' in self.__send_atdata(b'AT+UPAUTH=' + password)
+        return b'OK\r\n' in self.__send_atdata(b'AT+MAC=' + mac + b'\r\n')
 
-    def sleep(self, para):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+SLEEP=' + str(para).encode())
+    def connect(self, mac):
+        return b'OK\r\n' in self.__send_atdata(b'AT+CONNECT=,' + mac + b'\r\n')
 
-    def get_atestate(self):
-        return AT_ATE_OPEN if b'AT' in self.__send_atdata(b'AT') else AT_ATE_OFF
 
-    def set_atestate(self, para):
-        return b'+OK\r\n' in self.__send_atdata(b'ATE' + para)
-
-    def get_power(self):
-        return re.search(b'PWR:(\d)', self.__send_atdata(b'AT+PWR=?')).group(1)
-
-    def set_power(self, pwr):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+PWR=' + pwr)
-
-    def get_version(self):
-        return str(self.__send_atdata(b'AT+VER').decode('utf-8')).strip().split('\r\n')[-1]
-
-    def get_bondenable(self):
-        return re.search(b'BOND:(\d)', self.__send_atdata(b'AT+BOND=?')).group(1)
-
-    def set_bondenable(self, para):
-        return b'+OK\r\n' in self.__send_atdata(b'AT+BOND=' + para)
+    def set_cntinterval(self, cntInterval=16, timeout=200):
+        set_data = b'AT+CNT_INTERVAL=' + str(cntInterval).encode() + b',' + str(timeout).encode() + b'\r\n'
+        return b'OK\r\n' in self.__send_atdata(set_data)
 
     def send_file(self, file_path, save_file_name=b''):
         if self.sendflag:
@@ -630,11 +457,11 @@ class E104_BT08(threading.Thread):
                 for call in self.sendendcallback:
                     call(self, False)
                 return None
-            if split+40 >= self.sendlen:
+            if split + 40 >= self.sendlen:
                 self.write(self.senddata[split:self.sendlen])
                 break
             else:
-                self.write(self.senddata[split:split+40])
+                self.write(self.senddata[split:split + 40])
             time.sleep(0.005)
             split += 1
         self.issendreturn = True
@@ -710,23 +537,19 @@ class E104_BT08(threading.Thread):
 e104_bt08 = E104_BT08()
 
 
-def int_to_bytes(val):
-    base_255_array = []
-    while val > 0:
-        base_255_array.insert(0, val % 255)
-        val //= 255
-    while len(base_255_array) < 6:
-        base_255_array.insert(0, 0)
-    incremented_array = bytes(value + 1 for value in base_255_array)
-    return incremented_array
+def int_to_bytes(num):
+    array = bytearray(6)
+    for i in range(5, -1, -1):
+        array[i] = num % 256
+        num >>= 8
+    return array
 
 
-def bytes_to_int(byte_str):
-    base_255_array = [value - 1 for value in byte_str]
-    result = 0
-    for digit in base_255_array:
-        result = result * 255 + digit
-    return result
+def bytes_to_int(array):
+    num = 0
+    for i in range(len(array)):
+        num += array[i] << ((len(array) - 1 - i) * 8)
+    return num
 
 
 def crc32(datas):
@@ -739,11 +562,17 @@ def crc32_file(file_path):
     return crc32(file_data)
 
 
-if __name__ == '__main__':
+def compress_file(filename, output_filename):
+    with zipfile.ZipFile(output_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        zipf.write(filename, os.path.basename(filename))
 
-    e104_bt08.set_uuidserver(65521)  # 设置uuid为65521,uuid默认为65520,方便在多个模块间区分
-    e104_bt08.set_role(AT_ROLE_HOST)
-    e104_bt08.reset()  # 重启后生效
+
+def decompress_file(zip_filename, output_dir):
+    with zipfile.ZipFile(zip_filename, 'r') as zipf:
+        zipf.extractall(output_dir)
+
+
+if __name__ == '__main__':
     from maix import camera, display, image  # 引入python模块包
 
     image.load_freetype("/root/preset/fonts/simhei.ttf")
