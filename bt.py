@@ -94,6 +94,18 @@ class E104_BT08(threading.Thread):
                 elif self.isatreturn:
                     self.q.put(data)
                     self.isatreturn = False
+                elif self.getflag and self.getcontflag:
+                    self.getcont += len(data)
+                    with open(self.zipfile, "ab") as file:
+                        file.write(data)
+                    if self.getcont == self.getlen and crc32_file(self.zipfile) == self.getcrc:
+                        self.getflag = False
+                        self.getcontflag = False
+                        self.write(b'\xff\xff' + int_to_bytes(self.getlen) + self.getcrc)
+                        self.getcont = 0
+                        decompress_file(self.zipfile, self.socfile)
+                        os.remove(self.zipfile)
+                        print(time.time() - self.sendtime)
                 elif data[0:2] == b'\xff\xff':
                     # 发送文件结束接收返回
                     if self.issendreturn and len(data) == 16 and all(byte in b'0123456789abcdef' for byte in data[-8:]):
@@ -203,18 +215,6 @@ class E104_BT08(threading.Thread):
                         self.getflag = False
                         self.getcontflag = False
                         self.getcont = 0
-                elif self.getflag and self.getcontflag:
-                    self.getcont += len(data)
-                    with open(self.zipfile, "ab") as file:
-                        file.write(data)
-                    if self.getcont == self.getlen and crc32_file(self.zipfile) == self.getcrc:
-                        self.getflag = False
-                        self.getcontflag = False
-                        self.write(b'\xff\xff' + int_to_bytes(self.getlen) + self.getcrc)
-                        self.getcont = 0
-                        decompress_file(self.zipfile, self.socfile)
-                        os.remove(self.zipfile)
-                        print(time.time() - self.sendtime)
                 elif self.isatmod and data[:10] == b'+RECEIVED:':
                     temp = b''
                     for dataspl in data.split(b'\r\n')[2:-1]:
